@@ -1,10 +1,12 @@
-import sklearn
+from __future__ import annotations
+
 import pandas as pd
 import numpy as np
 import itertools
-from __future__ import division
 import collections
+import logging
 from sklearn.model_selection import train_test_split
+from typing import List, Tuple, Dict
 from sklearn import svm
 from sklearn.svm import SVC
 from sklearn import linear_model
@@ -12,7 +14,7 @@ from sklearn import tree
 from keras.models import Sequential
 from keras.layers import Convolution2D, MaxPooling2D, Convolution1D
 from keras.layers import Activation, Dropout, Flatten, Dense
-from tensorflow.keras.optimizers import SGD
+from keras.optimizers import SGD
 from sklearn.model_selection import cross_val_score
 from keras.utils import np_utils
 from sklearn.neighbors import KNeighborsClassifier
@@ -24,59 +26,27 @@ import sys
 from sklearn.ensemble import GradientBoostingRegressor
 import math
 import csv
-%matplotlib inline
 from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import classification_report
 import urllib
 from sklearn.svm import LinearSVC
 from utils import *
 
+logging.basicConfig(level=logging.DEBUG)
 
-#read in data
+#TODO add logging
+#TODO add error catching
+def add_poss_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Adds possession statistics to dataframe
+    
+    This calculates number of possessions and adds columns to indicate possessions and per possession stats 
 
-#read compact data in as DataFrame
-reg_season_compact_pd = pd.read_csv(r'C:/Users/Lenovo/Documents/Data/MRegularSeasonCompactResults.csv')
-print("Regular Season Compact\n\n",reg_season_compact_pd.head(),)
+    Args:
+        df (DataFrame): A DataFrame containing detailed NCAA game statistics
+    Returns:
+        DataFrame
+    """
 
-#read detailed data in as DataFrame
-reg_season_detailed_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MRegularSeasonDetailedResults.csv')
-
-pd.set_option('display.max_columns',None)
-print("Example of a game\n\n",reg_season_detailed_pd.loc[1])
-
-#read list of teams
-teams_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/Teams.csv')
-
-#make a list of teams
-teamList = teams_pd['Team_Name'].tolist()
-print("These are a sample of the teams\n\n",teams_pd.tail())
-
-#read tourney compact results
-tourney_compact_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneyCompactResults.csv')
-print("These are a sample of the compact tourney results\n\n",tourney_compact_pd.head())
-
-#read tourney detailed results
-tourney_detailed_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneyDetailedResults.csv')
-print("These are a sample of the detailed tourney results\n\n",tourney_detailed_pd.head())
-
-# read tourney seeds
-tourney_seeds_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneySeeds.csv')
-print("These are a sample of the tourney seeds\n\n",tourney_seeds_pd.head())
-
-#read tourney slots
-tourney_slots_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneySlots.csv')
-print("These are a sample of the tourney slots\n\n",tourney_slots_pd.head())
-
-#read conference info
-conference_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/Conference.csv')
-print("This is a sample of the conference information\n\n",conference_pd.head()
-
-#read tourney results
-tourney_results_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/TourneyResults.csv')
-print("These are a sample of the tourney results\n\n",tourney_results_pd.head())
-NCAAChampionsList = tourney_results_pd['NCAA Champion'].tolist()
-
-def add_poss_stats(df):
     # handle possessions for detailed tourney results
 
     #adds possession column
@@ -127,24 +97,17 @@ def add_poss_stats(df):
     df['LpfPerPoss'] = df['LPF'] / df['Lposs']
     return df
 
-#add possession columns to dataframes
-reg_season_detailed_pd = add_poss_stats(reg_season_detailed_pd)
-print("This is the new reg season dataframe with all the per possession columns added\n\n",reg_season_detailed_pd.head())
+def checkPower6Conference(team_id: int) -> int:
+    """Checks if a team is in a power conference
 
-tourney_detailed_pd = add_poss_stats(tourney_detailed_pd)
-print("This is the new tourney results dataframe with all the per possession columns added\n\n",tourney_detailed_pd.head())
+    This checks if a team is in oneof the top 6 larger conferenes in the NCAA it returns 1 if so and 0 if not
 
-#create lists of teams in major conferences
-listACCteams = ['North Carolina','Virginia','Florida St','Louisville','Notre Dame','Syracuse','Duke','Virginia Tech','Georgia Tech','Miami','Wake Forest','Clemson','NC State','Boston College','Pittsburgh']
-listPac12teams = ['Arizona','Oregon','UCLA','California','USC','Utah','Washington St','Stanford','Arizona St','Colorado','Washington','Oregon St']
-listSECteams = ['Kentucky','South Carolina','Florida','Arkansas','Alabama','Tennessee','Mississippi St','Georgia','Ole Miss','Vanderbilt','Auburn','Texas A&M','LSU','Missouri']
-listBig10teams = ['Maryland','Wisconsin','Purdue','Northwestern','Michigan St','Indiana','Iowa','Michigan','Penn St','Nebraska','Minnesota','Illinois','Ohio St','Rutgers']
-listBig12teams = ['Kansas','Baylor','West Virginia','Iowa St','TCU','Kansas St','Texas Tech','Oklahoma St','Texas','Oklahoma']
-listBigEastteams = ['Butler','Creighton','DePaul','Georgetown','Marquette','Providence','Seton Hall','St John\'s','Villanova','Xavier']
+    Args:
+        team_id (int): The integer id of a given team
+    Returns:
+        int
+    """
 
-
-
-def checkPower6Conference(team_id):
     teamName = teams_pd.values[team_id-1101][1]
     if (teamName in listACCteams or teamName in listBig10teams or teamName in listBig12teams
        or teamName in listSECteams or teamName in listPac12teams or teamName in listBigEastteams):
@@ -152,41 +115,79 @@ def checkPower6Conference(team_id):
     else:
         return 0
 
-def getTeamID(name):
+def getTeamID(name: str) -> int:
+    """Gets team id from name of school
+
+    Args:
+        name (str): The name of an NCAA school
+    Returns:
+        int
+    """
     return teams_pd[teams_pd['Team_Name'] == name].values[0][0]
 
 
-def getTeamName(team_id):
+def getTeamName(team_id: int) -> str:
+    """Gets team name from team id
+
+    Args:
+        team_id (int): Integer id of an NCAA team
+    Returns:
+        str
+    """
+
     return teams_pd[teams_pd['Team_Id'] == team_id].values[0][1]
 
 
-def getNumChampionships(team_id):
+def getNumChampionships(team_id: int) -> int:
+    """Gets the number of chapionships won by a team based on team id
+
+    Args:
+        team_id (int): Integer id of an NCAA team
+    Returns:
+        int
+    """
+
     name = getTeamName(team_id)
     return NCAAChampionsList.count(name)
 
-
-def getListForURL(team_list):
-    team_list = [x.lower() for x in team_list]
-    team_list = [t.replace(' ', '-') for t in team_list]
-    team_list = [t.replace('st', 'state') for t in team_list]
-    team_list = [t.replace('northern-dakota', 'north-dakota') for t in team_list]
-    team_list = [t.replace('nc-', 'north-carolina-') for t in team_list]
-    team_list = [t.replace('fl-', 'florida-') for t in team_list]
-    team_list = [t.replace('ga-', 'georgia-') for t in team_list]
-    team_list = [t.replace('lsu', 'louisiana-state') for t in team_list]
-    team_list = [t.replace('maristate', 'marist') for t in team_list]
-    team_list = [t.replace('stateate', 'state') for t in team_list]
-    team_list = [t.replace('northernorthern', 'northern') for t in team_list]
-    team_list = [t.replace('usc', 'southern-california') for t in team_list]
-    base = 'http://www.sports-reference.com/cbb/schools/'
-    for team in team_list:
-        url = base + team + '/'
-getListForURL(teamList)
-
-
+# TODO Check and see if this is used or not
+# def getListForURL(team_list):
+#     """Gets the number of chapionships won by a team based on team id
+#
+#     Args:
+#         team_id (int): Integer id of an NCAA team
+#     Returns:
+#         int
+#     """
+#     team_list = [x.lower() for x in team_list]
+#     team_list = [t.replace(' ', '-') for t in team_list]
+#     team_list = [t.replace('st', 'state') for t in team_list]
+#     team_list = [t.replace('northern-dakota', 'north-dakota') for t in team_list]
+#     team_list = [t.replace('nc-', 'north-carolina-') for t in team_list]
+#     team_list = [t.replace('fl-', 'florida-') for t in team_list]
+#     team_list = [t.replace('ga-', 'georgia-') for t in team_list]
+#     team_list = [t.replace('lsu', 'louisiana-state') for t in team_list]
+#     team_list = [t.replace('maristate', 'marist') for t in team_list]
+#     team_list = [t.replace('stateate', 'state') for t in team_list]
+#     team_list = [t.replace('northernorthern', 'northern') for t in team_list]
+#     team_list = [t.replace('usc', 'southern-california') for t in team_list]
+#     base = 'http://www.sports-reference.com/cbb/schools/'
+#     for team in team_list:
+#         url = base + team + '/'
 
 # Function for handling the annoying cases of Florida and FL, as well as State and St
-def handleCases(arr):
+def handleCases(arr: list[str]) -> list[str]:
+    """Handles school names with Florida or State
+
+    Some conventions spell out Florida and some use FL. Some spell out State and some use St. This standardizes these
+    naming conventions in a given list of school names.
+
+    Args:
+        arr (List[str]): List of school names
+    Returns:
+        List[str]
+    """
+
     indices = []
     listLen = len(arr)
     for i in range(listLen):
@@ -200,38 +201,75 @@ def handleCases(arr):
 
 
 
-def checkConferenceChamp(team_id, year):
+def checkConferenceChamp(team_id: int, year: int) -> int:
+    """Checks if a team won their conference in a given year.
+
+    If the team won their conference, the function returns 1. Otherwise, it returns 0.
+
+    Args:
+        team_id (int): Integer id of an NCAA team
+        year (int): Full year value
+    Returns:
+        int
+    """
+
     year_conf_pd = conference_pd[conference_pd['Year'] == year]
     champs = year_conf_pd['Regular Season Champ'].tolist()
     # For handling cases where there is more than one champion
     champs_separated = [words for segments in champs for words in segments.split()]
     name = getTeamName(team_id)
     champs_separated = handleCases(champs_separated)
-    if (name in champs_separated):
+    if name in champs_separated:
         return 1
     else:
         return 0
 
 
 
-def checkConferenceTourneyChamp(team_id, year):
+def checkConferenceTourneyChamp(team_id: int, year: int) -> int:
+    """Checks if a team won their conference championship game in a given year.
+
+    If the team won their conference championship, the function returns 1. Otherwise it returns 0.
+
+    Args:
+        team_id (int): Integer id of an NCAA team
+        year (int): Full year value
+    Returns:
+        int
+    """
+
     year_conf_pd = conference_pd[conference_pd['Year'] == year]
     champs = year_conf_pd['Tournament Champ'].tolist()
     name = getTeamName(team_id)
-    if (name in champs):
+    if name in champs:
         return 1
     else:
         return 0
 
 
 
-def getTourneyAppearances(team_id):
+def getTourneyAppearances(team_id: int) -> int:
+    """Checks how many times a team has played in the NCAA tournamnet.
+
+    Args:
+        team_id (int): Integer id of an NCAA team
+    Returns:
+        int
+    """
     return len(tourney_seeds_pd[tourney_seeds_pd['TeamID'] == team_id].index)
 
 
 
-def handleDifferentCSV(df):
-    # The stats CSV is a lit different in terms of naming so below is just some data cleaning
+def handleDifferentCSV(df: pd.DataFrame) -> pd.DataFrame:
+    """Cleans school naming differences between different data sources
+
+    The stats CSV is a little different in terms of naming so this is just some data cleaning
+    Args:
+        df (DataFrame): DataFrame including names of schoolsm
+    Returns:
+        DataFrame
+    """
+
     df['School'] = df['School'].replace('(State)', 'St', regex=True)
     df['School'] = df['School'].replace('Albany (NY)', 'Albany NY')
     df['School'] = df['School'].replace('Boston University', 'Boston Univ')
@@ -338,68 +376,97 @@ def handleDifferentCSV(df):
     return df
 
 
-def season_totals(stat,df,team_id):
-    total = stat['WScore'].sum()
+def season_totals(wstat: str, lstat: str, gamesWon: pd.DataFrame, df: pd.DataFrame, team_id: int) -> Tuple[int,int]:
+    """Adds the total number of a statistic for a team
+
+    For a given DataFrame, which is often already filtered by year, this adds up the total of the provided statistic. It
+    also returns the total number of games the team played in the given filtered DataFrame.
+
+    Args:
+        wstat (str): the name of a statistic from the winning team represented in the DataFrame
+        lstat (str): the name of a statistic from the losing team represented in the DataFrame
+        gamesWon (DataFrame): DataFrame with all the games which the given team has won
+        df (DataFrame): DataFrame of game statistics
+        team_id (int): the integer id of an NCAA team
+    Returns:
+        (int, int)
+    """
+
+    total = gamesWon['WScore'].sum()
     gamesLost = df[df.LTeamID == team_id]
-    totalGames = stat.append(gamesLost)
+    totalGames = gamesWon.append(gamesLost)
     numGames = len(totalGames.index)
     total += gamesLost['LScore'].sum()
+
     return total, numGames
 
-def getSeasonData(team_id, year):
+def getSeasonData(team_id: int, year: int) -> List[float]:
+    """Gets the full season data for a given team in a given year
+
+    This function looks at a team in a given year and returns a list of statistics which becomes the team's vector for
+    that season. This list of statistics can be edited and there are multiple iterations commented out in the code which
+    have been used at various stages of testing.
+
+    Args:
+        team_id (int): Integer id of an NCAA team
+        year (int): Full year value
+    Returns:
+        List[float]
+    """
+
     # The data frame below holds stats for every single game in the given year
     year_data_pd = reg_season_detailed_pd[reg_season_detailed_pd['Season'] == year]
-
+    # Finding number of points per game
     gamesWon = year_data_pd[year_data_pd.WTeamID == team_id]
     gamesLost = year_data_pd[year_data_pd.LTeamID == team_id]
 
-    # Finding number of points in season
-    totalPointsScored = season_totals('WScore',year_data_pd,team_id)[0]
-    numGames = season_totals('WScore',year_data_pd,team_id)[1]
+
+    totalPointsScored = season_totals('WScore','LScore',gamesWon,year_data_pd,team_id)[0]
+    numGames = season_totals('WScore','LScore',gamesWon,year_data_pd,team_id)[1]
 
     # Finding number of possessions in season
-    totalPoss = season_totals('Wposs', year_data_pd, team_id)[0]
+    totalPoss = season_totals('Wposs', 'Lposs', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of fgm in season
-    totalFgm = season_totals('WFGM', year_data_pd, team_id)[0]
+    totalFgm = season_totals('WFGM', 'LFGM', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of fga in season
-    totalFga = season_totals('WFGA', year_data_pd, team_id)[0]
+    totalFga = season_totals('WFGA', 'LFGA', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of fgm3 in season
-    totalFgm3 = season_totals('WFGM3', year_data_pd, team_id)[0]
+    totalFgm3 = season_totals('WFGM3', 'LFGM3', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of fga3 in season
-    totalFga3 = season_totals('WFGA3', year_data_pd, team_id)[0]
+    totalFga3 = season_totals('WFGA3', 'LFGA3', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of ftm in season
-    totalFtm = season_totals('WFTM', year_data_pd, team_id)[0]
+    totalFtm = season_totals('WFTM', 'LFTM', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of fta in season
-    totalFta = season_totals('WFTA', year_data_pd, team_id)[0]
+    totalFta = season_totals('WFTA', 'LFTA', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of or in season
-    totalOr = season_totals('WOR', year_data_pd, team_id)[0]
+    totalOr = season_totals('WOR', 'LOR', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of dr in season
-    totalDr = season_totals('WDR', year_data_pd, team_id)[0]
+    totalDr = season_totals('WDR', 'LDR', gamesWon, year_data_pd, team_id)[0]
 
     totalReb = totalOr + totalDr
 
     # Finding number of blk in season
-    totalBlk = season_totals('WBlk', year_data_pd, team_id)[0]
+    totalBlk = season_totals('WBlk', 'LBlk', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of pf in season
-    totalPf = season_totals('WPF', year_data_pd, team_id)[0]
+    totalPf = season_totals('WPF', 'LPF', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of to in season
-    totalTo = season_totals('WTO',year_data_pd,team_id)[0]
+    totalTo = season_totals('WTO', 'LTO', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of ast in season
-    totalAst = season_totals('WAst', year_data_pd, team_id)[0]
+    totalAst = season_totals('WAst', 'LAst', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of Stl in season
-    totalStl = season_totals('WStl', year_data_pd, team_id)[0]
+    totalStl = season_totals('WStl', 'LStl', gamesWon, year_data_pd, team_id)[0]
 
     # Finding number of points per game allowed
     totalPointsAllowed = gamesWon['LScore'].sum()
@@ -441,7 +508,7 @@ def getSeasonData(team_id, year):
     # Finding tournament seed for that year
     tourneyYear = tourney_seeds_pd[tourney_seeds_pd['Season'] == year]
     seed = tourneyYear[tourneyYear['TeamID'] == team_id]
-    if (len(seed.index) != 0):
+    if len(seed.index) != 0:
         seed = seed.values[0][1]
         tournamentSeed = int(seed[1:3])
     else:
@@ -497,27 +564,34 @@ def getSeasonData(team_id, year):
     # return [numWins, sos, srs]
     # return [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id), avg3sMade, avgTurnovers,
     #        tournamentSeed, getStrengthOfSchedule(team_id, year), getTourneyAppearances(team_id)]
-    return [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id), avg3sMade, avgAssists,
+    features = [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id), avg3sMade, avgAssists,
             avgTurnovers,
             checkConferenceChamp(team_id, year), checkConferenceTourneyChamp(team_id, year), tournamentSeed,
             avgRebounds, avgSteals, getTourneyAppearances(team_id), getNumChampionships(team_id), totalPoss,
             totalfgmPerPoss, totalfgaPerPoss, totalfgm3PerPoss, totalfga3PerPoss, totalftmPerPoss, totalftaPerPoss,
             totalorPerPoss, totaldrPerPoss, totalastPerPoss, totaltoPerPoss, totalstlPerPoss, totalblkPerPoss,
             totalpfPerPoss]
+    float_features = [float(x) for x in features]
+    return float_features
 
     # return [sos,srs,totalPoss, totalfgmPerPoss, totalfgaPerPoss, totalfgm3PerPoss, totalfga3PerPoss, totalftmPerPoss, totalftaPerPoss,
     #       totalorPerPoss, totaldrPerPoss, totalastPerPoss, totaltoPerPoss, totalstlPerPoss, totalblkPerPoss, totalpfPerPoss]
 
 
+#TODO this will need to be for 2023
+def get2022Data(team_id: int) -> List[float]:
+    """Gets the full season data for a given team in 2022
 
-this_year_pd = pd.read_csv("C:/Users/Lenovo/Documents/Data/2022.csv")
-handleDifferentCSV(this_year_pd)
-for i in range(68):
-    this_year_pd["Rk"][i]=int(getTeamID(this_year_pd["School"][i]))
-this_year_pd
+    This function looks at a team in 2022 and returns a list of statistics which becomes the team's vector for
+    that season. This list of statistics can be edited and there are multiple iterations commented out in the code which
+    have been used at various stages of testing. The list of features needs to match the list from getSeasonData.
 
+    Args:
+        team_id (int): Integer id of an NCAA team
+    Returns:
+        List[float]
+    """
 
-def get2022Data(team_id):
     # Finding number of points per game
     team_data = this_year_pd[this_year_pd.iloc[:, 0] == team_id]
     numWins = team_data.iloc[:, 3]
@@ -547,29 +621,32 @@ def get2022Data(team_id):
     totalstlPerPoss = team_data.iloc[:, 48]
     totalblkPerPoss = team_data.iloc[:, 49]
     totalpfPerPoss = team_data.iloc[:, 50]
-
-    return [int(numWins.iloc[0]), float(avgPointsScored), float(avgPointsAllowed), int(checkPower6Conference(team_id)),
+    #the vector needs to match the vector in getSeasonData
+    return [float(numWins.iloc[0]), float(avgPointsScored), float(avgPointsAllowed), float(checkPower6Conference(team_id)),
             float(avg3sMade), float(avgAssists), float(avgTurnovers),
-            int(reg_conf_champ), int(conf_tourn_champ), int(tournamentSeed),
-            float(avgRebounds), float(avgSteals), int(getTourneyAppearances(team_id)),
-            int(getNumChampionships(team_id)), totalPoss.iloc[0],
+            float(reg_conf_champ), float(conf_tourn_champ), float(tournamentSeed),
+            float(avgRebounds), float(avgSteals), float(getTourneyAppearances(team_id)),
+            float(getNumChampionships(team_id)), totalPoss.iloc[0],
             totalfgmPerPoss.iloc[0], totalfgaPerPoss.iloc[0], totalfgm3PerPoss.iloc[0], totalfga3PerPoss.iloc[0],
             totalftmPerPoss.iloc[0], totalftaPerPoss.iloc[0],
             totalorPerPoss.iloc[0], totaldrPerPoss.iloc[0], totalastPerPoss.iloc[0], totaltoPerPoss.iloc[0],
             totalstlPerPoss.iloc[0], totalblkPerPoss.iloc[0], totalpfPerPoss.iloc[0]]
 
 
+def compareTwoTeams(id_1: int, id_2: int, year: int) -> List[float]:
+    """Compares two teams in a given year and gives a combined vector for the matchup
 
-getSeasonData(1103,2022)
+    This function looks at two teams in a given year. It subtracts one team's vector from the other to create a matchup
+    vector.
 
-this_year_pd["School"][36]
+    Args:
+        id_1 (int): Integer id of the first NCAA team
+        id_2 (int): Integer id of the second NCAA team
+        year (int): Full year
+    Returns:
+        List[float]
+    """
 
-kentucky_id = teams_pd[teams_pd['Team_Name'] == 'Kentucky'].values[0][0]
-getSeasonData(kentucky_id, 2021)
-
-
-
-def compareTwoTeams(id_1, id_2, year):
     if year==2022:
         team_1 = get2022Data(id_1)
         team_2 = get2022Data(id_2)
@@ -580,13 +657,18 @@ def compareTwoTeams(id_1, id_2, year):
     return diff
 
 
+def createSeasonDict(year: int) -> Dict[int,List[float]]:
+    """Creates a dictionary of team vectors for all teams in a given year.
 
-kansas_id = teams_pd[teams_pd['Team_Name'] == 'Kansas'].values[0][0]
-compareTwoTeams(1234, 1242, 2022)
+    This function looks at all teams in a given year and calculates their team vector. It then creates a dictionary
+    where the team_id is the key and the vector is the value.
 
+    Args:
+        year (int): Full year
+    Returns:
+        Dict[int,List[float]]
+    """
 
-
-def createSeasonDict(year):
     seasonDictionary = collections.defaultdict(list)
     for team in teamList:
         team_id = teams_pd[teams_pd['Team_Name'] == team].values[0][0]
@@ -596,27 +678,50 @@ def createSeasonDict(year):
 
 
 
-def getHomeStat(row):
-    if (row == 'H'):
+def getHomeStat(row: pd.Series) -> int:
+    """Calculates if a team was at home, away, or at a neutral site.
+
+    This function looks at a matchup and if the team was the home team returns 1, if away it returns -1. If neutral it
+    returns 0.
+
+    Args:
+        row (pd.Series): A row of a dataframe representing a matchup
+    Returns:
+        int
+    """
+    home = 0
+    if row == 'H':
         home = 1
-    if (row == 'A'):
+    elif row == 'A':
         home = -1
-    if (row == 'N'):
+    elif row == 'N':
         home = 0
     return home
 
 
 
-def createTrainingSet(years):
+def createTrainingSet(years: range) -> Tuple[np.array,np.array]:
+    """Creates a training set and a training target set
+
+    This function iterates through a range of years and creates a training set of matchup vectors as well as a target
+    vector indicating if the first named team in the matchup won or lost.
+
+    Args:
+        years (range): A range object of years to include in the training set
+    Returns:
+        Tuple[np.array,np.array]
+    """
+
     totalNumGames = 0
+    #loop through years
     for year in years:
         season = reg_season_compact_pd[reg_season_compact_pd['Season'] == year]
         totalNumGames += len(season.index)
         tourney = tourney_compact_pd[tourney_compact_pd['Season'] == year]
         totalNumGames += len(tourney.index)
     numFeatures = len(getSeasonData(1181,2012)) #Just choosing a random team and seeing the dimensionality of the vector
-    xTrain = np.zeros(( totalNumGames, numFeatures + 1))
-    yTrain = np.zeros(( totalNumGames ))
+    x_Train = np.zeros(( totalNumGames, numFeatures + 1))
+    y_Train = np.zeros( totalNumGames )
     indexCounter = 0
     for year in years:
         team_vectors = createSeasonDict(year)
@@ -659,27 +764,191 @@ def createTrainingSet(years):
                 xTrainSeason[counter] = [ -p for p in diff]
                 yTrainSeason[counter] = 0
             counter += 1
-        xTrain[indexCounter:numGamesInSeason+indexCounter] = xTrainSeason
-        yTrain[indexCounter:numGamesInSeason+indexCounter] = yTrainSeason
+        x_Train[indexCounter:numGamesInSeason+indexCounter] = xTrainSeason
+        y_Train[indexCounter:numGamesInSeason+indexCounter] = yTrainSeason
         indexCounter += numGamesInSeason
-    return xTrain, yTrain
+    return x_Train, y_Train
 
 
+#TODO normalize inputs
+def normalizeInput(arr: List[float]) -> List[float]:
+    """Normalizes values in a vector
 
-def normalizeInput(arr):
-    for i in range(arr.shape[1]):
-        minVal = min(arr[:,i])
-        maxVal = max(arr[:,i])
-        arr[:,i] =  (arr[:,i] - minVal) / (maxVal - minVal)
+    This function scales the values in the vectors between the max and the min values in the data.
+
+    Args:
+        arr (List[float]): A feature vector
+    Returns:
+        List[float]
+    """
+
+    for j in range(arr.shape[1]):
+        minVal = min(arr[:,j])
+        maxVal = max(arr[:,j])
+        arr[:,i] =  (arr[:,j] - minVal) / (maxVal - minVal)
     return arr
 # alternative:
-def normalize(X):
+def normalize(X: List[float]) -> List[float]:
+    """Normalizes values in a vector
+
+    This function standardizes a feature vector by setting the mean to 0 and the standard deviation to 1. This is the
+    second normalization function available.
+
+    Args:
+        X (List[float]): A feature vector
+    Returns:
+        List[float]
+    """
+
     return (X - np.mean(X, axis = 0)) / np.std(X, axis = 0)
 
+def showDependency(predictions, test, stat, my_categories):
+    """Plots the actual values vs predictions for a given stat
+
+    Args:
+        predictions (List): The list of predictions generated by the model
+        test ():
+        stat ():
+        my_categories():
+    Returns:
+        None
+    """
+
+    difference = test[:,my_categories.index(stat)]
+    plt.scatter(difference, predictions)
+    plt.ylabel('Probability of Team 1 Win')
+    plt.xlabel(stat + ' Difference (Team 1 - Team 2)')
+    plt.show()
 
 
-years = range(1993,2022)
-xTrain, yTrain = createTrainingSet(years)
+
+def showFeatureImportance(my_categories):
+    """Plots feature importance from model
+
+    Args:
+        my_categories (List[str]): A list of features to check the importance of
+    Returns:
+        None
+    """
+
+    fx_imp = pd.Series(model.feature_importances_, index=my_categories)
+    fx_imp /= fx_imp.max()
+    fx_imp.sort_values(ascending=True)
+    fx_imp.plot(kind='barh')
+
+def predictGame(team_1_vector: List[float], team_2_vector: List[float], home: int) -> float:
+    """Runs a matchup vector through the trained model and outputs a probability that the first team wins
+
+    Args:
+        team_1_vector (List[float]): The team vector of the first team
+        team_2_vector (List[float]): The team vector of the second team
+        home (int): If the first team is home, this is 1. Away is -1, and neutral is 0
+    Returns:
+        float
+    """
+    diff = [a - b for a, b in zip(team_1_vector, team_2_vector)]
+    diff.append(float(home))
+    return model.predict([diff])
+    #return model.predict_proba([diff])
+
+
+#read in data
+
+#read compact data in as DataFrame
+reg_season_compact_pd = pd.read_csv(r'C:/Users/Lenovo/Documents/Data/MRegularSeasonCompactResults.csv')
+print("Regular Season Compact\n\n",reg_season_compact_pd.head(),)
+
+#read detailed data in as DataFrame
+reg_season_detailed_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MRegularSeasonDetailedResults.csv')
+
+pd.set_option('display.max_columns',None)
+print("Example of a game\n\n",reg_season_detailed_pd.loc[1])
+
+#read list of teams
+teams_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/Teams.csv')
+
+#make a list of teams
+teamList = teams_pd['Team_Name'].tolist()
+print("These are a sample of the teams\n\n",teams_pd.tail())
+
+#read tourney compact results
+tourney_compact_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneyCompactResults.csv')
+print("These are a sample of the compact tourney results\n\n",tourney_compact_pd.head())
+
+#read tourney detailed results
+tourney_detailed_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneyDetailedResults.csv')
+print("These are a sample of the detailed tourney results\n\n",tourney_detailed_pd.head())
+
+# read tourney seeds
+tourney_seeds_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneySeeds.csv')
+print("These are a sample of the tourney seeds\n\n",tourney_seeds_pd.head())
+
+#read tourney slots
+tourney_slots_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneySlots.csv')
+print("These are a sample of the tourney slots\n\n",tourney_slots_pd.head())
+
+#read conference info
+conference_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/Conference.csv')
+print("This is a sample of the conference information\n\n",conference_pd.head())
+
+#read tourney results
+tourney_results_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/TourneyResults.csv')
+print("These are a sample of the tourney results\n\n",tourney_results_pd.head())
+NCAAChampionsList = tourney_results_pd['NCAA Champion'].tolist()
+logging.info("Data read successfully")
+
+#add possession columns to dataframes
+reg_season_detailed_pd = add_poss_stats(reg_season_detailed_pd)
+print("This is the new reg season dataframe with all the per possession columns added\n\n",reg_season_detailed_pd.head())
+
+tourney_detailed_pd = add_poss_stats(tourney_detailed_pd)
+print("This is the new tourney results dataframe with all the per possession columns added\n\n",tourney_detailed_pd.head())
+
+#create lists of teams in major conferences
+listACCteams = ['North Carolina','Virginia','Florida St','Louisville','Notre Dame','Syracuse','Duke','Virginia Tech','Georgia Tech','Miami','Wake Forest','Clemson','NC State','Boston College','Pittsburgh']
+listPac12teams = ['Arizona','Oregon','UCLA','California','USC','Utah','Washington St','Stanford','Arizona St','Colorado','Washington','Oregon St']
+listSECteams = ['Kentucky','South Carolina','Florida','Arkansas','Alabama','Tennessee','Mississippi St','Georgia','Ole Miss','Vanderbilt','Auburn','Texas A&M','LSU','Missouri']
+listBig10teams = ['Maryland','Wisconsin','Purdue','Northwestern','Michigan St','Indiana','Iowa','Michigan','Penn St','Nebraska','Minnesota','Illinois','Ohio St','Rutgers']
+listBig12teams = ['Kansas','Baylor','West Virginia','Iowa St','TCU','Kansas St','Texas Tech','Oklahoma St','Texas','Oklahoma']
+listBigEastteams = ['Butler','Creighton','DePaul','Georgetown','Marquette','Providence','Seton Hall','St John\'s','Villanova','Xavier']
+
+
+# TODO this is unused
+# getListForURL(teamList)
+
+
+
+logging.info("Reading 2022 data")
+
+#read this year's data
+this_year_pd = pd.read_csv("C:/Users/Lenovo/Documents/Data/2022.csv")
+handleDifferentCSV(this_year_pd)
+for i in range(68):
+    this_year_pd["Rk"][i]=int(getTeamID(this_year_pd["School"][i]))
+print("This years data is: \n\n",this_year_pd)
+logging.info("2022 data read successfully")
+
+
+#test the functions to this point
+print("The vector for teamID 1103 in 2022 is ",getSeasonData(1103,2022))
+
+#get kentucky vector from 2021
+kentucky_id = teams_pd[teams_pd['Team_Name'] == 'Kentucky'].values[0][0]
+print("The vector for Kentucky in 2021 is ",getSeasonData(kentucky_id, 2021))
+
+
+
+
+#test comparison of two teams in 2022
+kansas_id = teams_pd[teams_pd['Team_Name'] == 'Kansas'].values[0][0]
+print("The vector for teamIDs 1234 and 1242 in 2022 is ",compareTwoTeams(1234, 1242, 2022))
+
+
+#TODO experiment with the range of years which leads to the best results
+years_to_train = range(1993,2022)
+logging.info("Creating training set")
+xTrain, yTrain = createTrainingSet(years_to_train)
+logging.info("Training set created")
 np.save('xTrain', xTrain)
 np.save('yTrain', yTrain)
 
@@ -690,50 +959,30 @@ np.save('yTrain', yTrain)
 # yTrain = np.load('Data/March-Madness-2017-master/PrecomputedMatrices/yTrain.npy')
 
 
-
-xTrain.shape
-yTrain.shape
-
+print("xTrain shape: ",xTrain.shape,"\nyTrain shape: ",yTrain.shape)
 
 
 # These are the different models I tried. Simply uncomment the model that you want to try.
-
-model = [tree.DecisionTreeClassifier(), tree.DecisionTreeRegressor(), linear_model.LogisticRegression(),
-         linear_model.Lasso(), linear_model.Ridge(alpha = 0.5),
-         AdaBoostClassifier(n_estimators=100), GradientBoostingClassifier(n_estimators=100), GradientBoostingRegressor(n_estimators=100, max_depth=5),
-        RandomForestClassifier(n_estimators=64), KNeighborsClassifier(n_neighbors=39), LinearSVC(penalty='l2', loss='squared_hinge', dual=True, tol=0.0001, C=0.1)]
-#model = tree.DecisionTreeRegressor()
-#model = linear_model.LogisticRegression()
-#model = linear_model.BayesianRidge()
-#model = linear_model.Lasso()
-#model = svm.SVC()
-#model = svm.SVR()
-#model = linear_model.Ridge(alpha = 0.5)
-#model = AdaBoostClassifier(n_estimators=100)
-#model = GradientBoostingClassifier(n_estimators=100)
-#model = [GradientBoostingRegressor(n_estimators=100, max_depth=5)]
-#model = RandomForestClassifier(n_estimators=64)
-#model = KNeighborsClassifier(n_neighbors=39)
-#neuralNetwork(10)
-#model = VotingClassifier(estimators=[('GBR', model1), ('BR', model2), ('KNN', model3)], voting='soft')
-#model = LinearSVC(penalty='l2', loss='squared_hinge', dual=True, tol=0.0001, C=0.1)
+#TODO utilize cross validation
+model = tree.DecisionTreeClassifier()
+# model = tree.DecisionTreeRegressor()
+# model = linear_model.LogisticRegression()
+# model = linear_model.BayesianRidge()
+# model = linear_model.Lasso()
+# model = svm.SVC()
+# model = svm.SVR()
+# model = linear_model.Ridge(alpha = 0.5)
+# model = AdaBoostClassifier(n_estimators=100)
+# model = GradientBoostingClassifier(n_estimators=100)
+# model = [GradientBoostingRegressor(n_estimators=100, max_depth=5)]
+# model = RandomForestClassifier(n_estimators=64)
+# model = KNeighborsClassifier(n_neighbors=39)
+# neuralNetwork(10)
+# model = VotingClassifier(estimators=[('GBR', model1), ('BR', model2), ('KNN', model3)], voting='soft')
+# model = LinearSVC(penalty='l2', loss='squared_hinge', dual=True, tol=0.0001, C=0.1)
 
 
 
-def showDependency(predictions, test, stat, my_categories):
-    difference = test[:,my_categories.index(stat)]
-    plt.scatter(difference, predictions)
-    plt.ylabel('Probability of Team 1 Win')
-    plt.xlabel(stat + ' Difference (Team 1 - Team 2)')
-    plt.show()
-
-
-
-def showFeatureImportance(my_categories):
-    fx_imp = pd.Series(model.feature_importances_, index=my_categories)
-    fx_imp /= fx_imp.max()
-    fx_imp.sort_values(ascending=True)
-    fx_imp.plot(kind='barh')
 
 
 # categories=['Wins','PPG','PPGA','PowerConf','3PG', 'APG','TOP','Conference Champ','Tourney Conference Champ',
@@ -743,14 +992,16 @@ def showFeatureImportance(my_categories):
 # 'totalstlPerPoss', 'totalblkPerPoss', 'totalpfPerPoss','Location']
 
 
-model = GradientBoostingRegressor(n_estimators=100, max_depth=5)
+# model = GradientBoostingRegressor(n_estimators=100, max_depth=5)
 # model = linear_model.Ridge(alpha = 0.5)
+# TODO utilize the categories or delete them
 categories = ['sos', 'srs', 'totalPoss', 'totalfgmPerPoss', 'totalfgaPerPoss', 'totalfgm3PerPoss', 'totalfga3PerPoss',
               'totalftmPerPoss',
               'totalftaPerPoss', 'totalorPerPoss', 'totaldrPerPoss', 'totalastPerPoss', 'totaltoPerPoss',
               'totalstlPerPoss', 'totalblkPerPoss', 'totalpfPerPoss', 'Location']
 accuracy = []
 
+logging.info("Iterating through models")
 for i in range(10):
     X_train, X_test, Y_train, Y_test = train_test_split(xTrain, yTrain)
     results = model.fit(X_train, Y_train)
@@ -758,6 +1009,7 @@ for i in range(10):
 
     preds[preds < .5] = 0
     preds[preds >= .5] = 1
+    #TODO try different accuracy measure
     accuracy.append(np.mean(preds == Y_test))
     # accuracy.append(np.mean(predictions == Y_test))
     print("n_estimators - ", 100, " max_depth - ", 5, "Finished iteration:", i, "The accuracy is",
@@ -766,25 +1018,20 @@ print("n_estimators - ", 100, " max_depth - ", 5, "The accuracy is", sum(accurac
 
 
 
-showFeatureImportance(['Wins','PPG','PPGA','PowerConf','3PG', 'APG','TOP','Conference Champ','Tourney Conference Champ',
-             'Seed', 'RPG', 'SPG', 'Tourney Appearances','National Championships','totalPoss',
-             'totalfgmPerPoss', 'totalfgaPerPoss', 'totalfgm3PerPoss', 'totalfga3PerPoss', 'totalftmPerPoss',
-             'totalftaPerPoss', 'totalorPerPoss', 'totaldrPerPoss', 'totalastPerPoss', 'totaltoPerPoss',
-             'totalstlPerPoss', 'totalblkPerPoss', 'totalpfPerPoss','Location'])
+# showFeatureImportance(['Wins','PPG','PPGA','PowerConf','3PG', 'APG','TOP','Conference Champ','Tourney Conference Champ',
+#              'Seed', 'RPG', 'SPG', 'Tourney Appearances','National Championships','totalPoss',
+#              'totalfgmPerPoss', 'totalfgaPerPoss', 'totalfgm3PerPoss', 'totalfga3PerPoss', 'totalftmPerPoss',
+#              'totalftaPerPoss', 'totalorPerPoss', 'totaldrPerPoss', 'totalastPerPoss', 'totaltoPerPoss',
+#              'totalstlPerPoss', 'totalblkPerPoss', 'totalpfPerPoss','Location'])
 
 #showFeatureImportance(['Wins','SOS','SRS','location'])
 
 
-
-def predictGame(team_1_vector, team_2_vector, home):
-    diff = [a - b for a, b in zip(team_1_vector, team_2_vector)]
-    diff.append(home)
-    return model.predict([diff])
-    #return model.predict_proba([diff])
+#TODO make sure to normalize this too
 
 
 
-# This was the national championship matchup last year
+# This can be used to predict 2022 games
 team1_name = "Duke"
 team2_name = "Arizona"
 team1_vector = get2022Data(teams_pd[teams_pd['Team_Name'] == team1_name].values[0][0])
@@ -793,40 +1040,24 @@ print ('Probability that ' + team1_name + ' wins:', predictGame(team1_vector, te
 
 
 
-# This was the national championship matchup last year
-team1_name = "Arizona"
-team2_name = "Kansas"
-team1_vector = get2022Data(teams_pd[teams_pd['Team_Name'] == team1_name].values[0][0])
-team2_vector = get2022Data(teams_pd[teams_pd['Team_Name'] == team2_name].values[0][0])
-print ('Probability that ' + team1_name + ' wins:', predictGame(team1_vector, team2_vector, 0)[0])
 
-
-
-# This was the national championship matchup last year
-team1_name = "Tennessee"
-team2_name = "Villanova"
-team1_vector = get2022Data(teams_pd[teams_pd['Team_Name'] == team1_name].values[0][0])
-team2_vector = get2022Data(teams_pd[teams_pd['Team_Name'] == team2_name].values[0][0])
-print ('Probability that ' + team1_name + ' wins:', predictGame(team1_vector, team2_vector, 0)[0])
-
-
-
-submission=pd.read_csv("C:/Users/Lenovo/Documents/MDataFiles_Stage2/MSampleSubmissionStage2.csv")
-submission
-
-
-
-preds=[]
-for i in range(2278):
-    vector1=get2022Data(int(submission.iloc[i][0][5:9]))
-    vector2=get2022Data(int(submission.iloc[i][0][10:14]))
-    pred=predictGame(vector1, vector2, 0)[0]
-    preds.append(pred)
-submission["Pred"]=preds
-
-
-
-submission.tail()
+# TODO uncomment to create submission for Kaggle
+# submission=pd.read_csv("C:/Users/Lenovo/Documents/MDataFiles_Stage2/MSampleSubmissionStage2.csv")
+# submission
+#
+#
+#
+# preds=[]
+# for i in range(2278):
+#     vector1=get2022Data(int(submission.iloc[i][0][5:9]))
+#     vector2=get2022Data(int(submission.iloc[i][0][10:14]))
+#     pred=predictGame(vector1, vector2, 0)[0]
+#     preds.append(pred)
+# submission["Pred"]=preds
+#
+#
+#
+# submission.tail()
 
 
 
