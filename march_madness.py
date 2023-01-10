@@ -4,8 +4,9 @@ import pandas as pd
 import numpy as np
 import itertools
 import collections
+from sklearn.model_selection import cross_val_score, GridSearchCV
 import logging
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_validate
 from typing import List, Tuple, Dict
 from sklearn import svm
 from sklearn.svm import SVC
@@ -34,8 +35,14 @@ from utils import *
 
 logging.basicConfig(level=logging.DEBUG)
 
+
+training_mean = 0
+training_std = 0
+training_min = 0
+training_max = 0
 #TODO add logging
 #TODO add error catching
+#TODO add files to github
 def add_poss_stats(df: pd.DataFrame) -> pd.DataFrame:
     """Adds possession statistics to dataframe
     
@@ -152,7 +159,7 @@ def getNumChampionships(team_id: int) -> int:
 
 # TODO Check and see if this is used or not
 # def getListForURL(team_list):
-#     """Gets the number of chapionships won by a team based on team id
+#     """Gets the number of championships won by a team based on team id
 #
 #     Args:
 #         team_id (int): Integer id of an NCAA team
@@ -392,11 +399,11 @@ def season_totals(wstat: str, lstat: str, gamesWon: pd.DataFrame, df: pd.DataFra
         (int, int)
     """
 
-    total = gamesWon['WScore'].sum()
+    total = gamesWon[wstat].sum()
     gamesLost = df[df.LTeamID == team_id]
     totalGames = gamesWon.append(gamesLost)
     numGames = len(totalGames.index)
-    total += gamesLost['LScore'].sum()
+    total += gamesLost[lstat].sum()
 
     return total, numGames
 
@@ -564,13 +571,21 @@ def getSeasonData(team_id: int, year: int) -> List[float]:
     # return [numWins, sos, srs]
     # return [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id), avg3sMade, avgTurnovers,
     #        tournamentSeed, getStrengthOfSchedule(team_id, year), getTourneyAppearances(team_id)]
-    features = [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id), avg3sMade, avgAssists,
-            avgTurnovers,
-            checkConferenceChamp(team_id, year), checkConferenceTourneyChamp(team_id, year), tournamentSeed,
-            avgRebounds, avgSteals, getTourneyAppearances(team_id), getNumChampionships(team_id), totalPoss,
-            totalfgmPerPoss, totalfgaPerPoss, totalfgm3PerPoss, totalfga3PerPoss, totalftmPerPoss, totalftaPerPoss,
-            totalorPerPoss, totaldrPerPoss, totalastPerPoss, totaltoPerPoss, totalstlPerPoss, totalblkPerPoss,
-            totalpfPerPoss]
+    # This is the full feature set based on intuition
+    # features = [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id), avg3sMade, avgAssists,
+    #         avgTurnovers,
+    #         checkConferenceChamp(team_id, year), checkConferenceTourneyChamp(team_id, year), tournamentSeed,
+    #         avgRebounds, avgSteals, getTourneyAppearances(team_id), getNumChampionships(team_id), totalPoss,
+    #         totalfgmPerPoss, totalfgaPerPoss, totalfgm3PerPoss, totalfga3PerPoss, totalftmPerPoss, totalftaPerPoss,
+    #         totalorPerPoss, totaldrPerPoss, totalastPerPoss, totaltoPerPoss, totalstlPerPoss, totalblkPerPoss,
+    #         totalpfPerPoss]
+    # This is after RFE on training data normalized with the mean
+    features = [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id), avgAssists, avgTurnovers,
+                tournamentSeed, getTourneyAppearances(team_id), totalfgmPerPoss, totalftmPerPoss, totalftaPerPoss,
+                totaldrPerPoss, totalastPerPoss]
+    # features = [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id),
+    #             avgAssists, avgTurnovers, tournamentSeed, getTourneyAppearances(team_id),
+    #             totalPoss, totalfgmPerPoss, totalftmPerPoss, totaldrPerPoss, totalastPerPoss]
     float_features = [float(x) for x in features]
     return float_features
 
@@ -622,15 +637,21 @@ def get2022Data(team_id: int) -> List[float]:
     totalblkPerPoss = team_data.iloc[:, 49]
     totalpfPerPoss = team_data.iloc[:, 50]
     #the vector needs to match the vector in getSeasonData
-    return [float(numWins.iloc[0]), float(avgPointsScored), float(avgPointsAllowed), float(checkPower6Conference(team_id)),
-            float(avg3sMade), float(avgAssists), float(avgTurnovers),
-            float(reg_conf_champ), float(conf_tourn_champ), float(tournamentSeed),
-            float(avgRebounds), float(avgSteals), float(getTourneyAppearances(team_id)),
-            float(getNumChampionships(team_id)), totalPoss.iloc[0],
-            totalfgmPerPoss.iloc[0], totalfgaPerPoss.iloc[0], totalfgm3PerPoss.iloc[0], totalfga3PerPoss.iloc[0],
-            totalftmPerPoss.iloc[0], totalftaPerPoss.iloc[0],
-            totalorPerPoss.iloc[0], totaldrPerPoss.iloc[0], totalastPerPoss.iloc[0], totaltoPerPoss.iloc[0],
-            totalstlPerPoss.iloc[0], totalblkPerPoss.iloc[0], totalpfPerPoss.iloc[0]]
+    # features = [float(numWins.iloc[0]), float(avgPointsScored), float(avgPointsAllowed), float(checkPower6Conference(team_id)),
+    #         float(avg3sMade), float(avgAssists), float(avgTurnovers),
+    #         float(reg_conf_champ), float(conf_tourn_champ), float(tournamentSeed),
+    #         float(avgRebounds), float(avgSteals), float(getTourneyAppearances(team_id)),
+    #         float(getNumChampionships(team_id)), totalPoss.iloc[0],
+    #         totalfgmPerPoss.iloc[0], totalfgaPerPoss.iloc[0], totalfgm3PerPoss.iloc[0], totalfga3PerPoss.iloc[0],
+    #         totalftmPerPoss.iloc[0], totalftaPerPoss.iloc[0],
+    #         totalorPerPoss.iloc[0], totaldrPerPoss.iloc[0], totalastPerPoss.iloc[0], totaltoPerPoss.iloc[0],
+    #         totalstlPerPoss.iloc[0], totalblkPerPoss.iloc[0], totalpfPerPoss.iloc[0]]
+
+    features = [float(numWins.iloc[0]), float(avgPointsScored), float(avgPointsAllowed), float(checkPower6Conference(team_id)),
+            float(avgAssists), float(avgTurnovers), float(tournamentSeed), float(getTourneyAppearances(team_id)),
+            totalfgmPerPoss.iloc[0], totalftmPerPoss.iloc[0], totalftaPerPoss.iloc[0], totaldrPerPoss.iloc[0], totalastPerPoss.iloc[0]]
+
+    return features
 
 
 def compareTwoTeams(id_1: int, id_2: int, year: int) -> List[float]:
@@ -781,12 +802,16 @@ def normalizeInput(arr: List[float]) -> List[float]:
     Returns:
         List[float]
     """
-
+    arr_new = arr.copy()
+    global training_min
+    global training_max
+    training_min = np.min(xTrain, axis=0)
+    training_max = np.max(xTrain, axis=0)
     for j in range(arr.shape[1]):
         minVal = min(arr[:,j])
         maxVal = max(arr[:,j])
-        arr[:,i] =  (arr[:,j] - minVal) / (maxVal - minVal)
-    return arr
+        arr_new[:,j] =  (arr_new[:,j] - minVal) / (maxVal - minVal)
+    return arr_new
 # alternative:
 def normalize(X: List[float]) -> List[float]:
     """Normalizes values in a vector
@@ -799,8 +824,15 @@ def normalize(X: List[float]) -> List[float]:
     Returns:
         List[float]
     """
+    global training_mean
+    global training_std
+    x_new = X
+    training_mean = np.mean(X, axis = 0)
+    training_std = np.std(X, axis = 0)
+    return (x_new - np.mean(x_new, axis = 0)) / np.std(x_new, axis = 0)
 
-    return (X - np.mean(X, axis = 0)) / np.std(X, axis = 0)
+
+
 
 def showDependency(predictions, test, stat, my_categories):
     """Plots the actual values vs predictions for a given stat
@@ -846,53 +878,63 @@ def predictGame(team_1_vector: List[float], team_2_vector: List[float], home: in
     Returns:
         float
     """
+    global training_min
+    global training_max
     diff = [a - b for a, b in zip(team_1_vector, team_2_vector)]
+    diff_flip = [a - b for a, b in zip(team_2_vector,team_1_vector)]
     diff.append(float(home))
-    return model.predict([diff])
+    diff_flip.append(float(home))
+    diff = (diff-training_min)/(training_max-training_min)
+    diff_flip = (diff_flip-training_min)/(training_max-training_min)
+
+    probability_team_1 = (model.predict_proba([diff])[0][1]+model.predict_proba([diff_flip])[0][0])/2
+
+    return probability_team_1
     #return model.predict_proba([diff])
+
 
 
 #read in data
 
 #read compact data in as DataFrame
-reg_season_compact_pd = pd.read_csv(r'C:/Users/Lenovo/Documents/Data/MRegularSeasonCompactResults.csv')
+reg_season_compact_pd = pd.read_csv(r'files/MRegularSeasonCompactResults.csv')
 print("Regular Season Compact\n\n",reg_season_compact_pd.head(),)
 
 #read detailed data in as DataFrame
-reg_season_detailed_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MRegularSeasonDetailedResults.csv')
+reg_season_detailed_pd = pd.read_csv('files/MRegularSeasonDetailedResults.csv')
 
 pd.set_option('display.max_columns',None)
 print("Example of a game\n\n",reg_season_detailed_pd.loc[1])
 
 #read list of teams
-teams_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/Teams.csv')
+teams_pd = pd.read_csv('files/Teams.csv')
 
 #make a list of teams
 teamList = teams_pd['Team_Name'].tolist()
 print("These are a sample of the teams\n\n",teams_pd.tail())
 
 #read tourney compact results
-tourney_compact_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneyCompactResults.csv')
+tourney_compact_pd = pd.read_csv('files/MNCAATourneyCompactResults.csv')
 print("These are a sample of the compact tourney results\n\n",tourney_compact_pd.head())
 
 #read tourney detailed results
-tourney_detailed_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneyDetailedResults.csv')
+tourney_detailed_pd = pd.read_csv('files/MNCAATourneyDetailedResults.csv')
 print("These are a sample of the detailed tourney results\n\n",tourney_detailed_pd.head())
 
 # read tourney seeds
-tourney_seeds_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneySeeds.csv')
+tourney_seeds_pd = pd.read_csv('files/MNCAATourneySeeds.csv')
 print("These are a sample of the tourney seeds\n\n",tourney_seeds_pd.head())
 
 #read tourney slots
-tourney_slots_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/MNCAATourneySlots.csv')
+tourney_slots_pd = pd.read_csv('files/MNCAATourneySlots.csv')
 print("These are a sample of the tourney slots\n\n",tourney_slots_pd.head())
 
 #read conference info
-conference_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/Conference.csv')
+conference_pd = pd.read_csv('files/Conference.csv')
 print("This is a sample of the conference information\n\n",conference_pd.head())
 
 #read tourney results
-tourney_results_pd = pd.read_csv('C:/Users/Lenovo/Documents/Data/TourneyResults.csv')
+tourney_results_pd = pd.read_csv('files/TourneyResults.csv')
 print("These are a sample of the tourney results\n\n",tourney_results_pd.head())
 NCAAChampionsList = tourney_results_pd['NCAA Champion'].tolist()
 logging.info("Data read successfully")
@@ -920,8 +962,8 @@ listBigEastteams = ['Butler','Creighton','DePaul','Georgetown','Marquette','Prov
 
 logging.info("Reading 2022 data")
 
-#read this year's data
-this_year_pd = pd.read_csv("C:/Users/Lenovo/Documents/Data/2022.csv")
+# read this year's data. The code actually pulls this year's data from reg season detailed
+this_year_pd = pd.read_csv("files/2022.csv")
 handleDifferentCSV(this_year_pd)
 for i in range(68):
     this_year_pd["Rk"][i]=int(getTeamID(this_year_pd["School"][i]))
@@ -945,28 +987,38 @@ print("The vector for teamIDs 1234 and 1242 in 2022 is ",compareTwoTeams(1234, 1
 
 
 #TODO experiment with the range of years which leads to the best results
-years_to_train = range(1993,2022)
-logging.info("Creating training set")
-xTrain, yTrain = createTrainingSet(years_to_train)
-logging.info("Training set created")
-np.save('xTrain', xTrain)
-np.save('yTrain', yTrain)
+def get_x_and_y(load_model):
+    if load_model == False:
+        years_to_train = range(2003,2022)
+        logging.info("Creating training set")
+        xTrain, yTrain = createTrainingSet(years_to_train)
+        logging.info("Training set created")
+        np.save('xTrain', xTrain)
+        np.save('yTrain', yTrain)
+    else:
 
 
+        # import numpy as np
+        # xTrain = np.load('Data/March-Madness-2017-master/PrecomputedMatrices/xTrain.npy')
+        # yTrain = np.load('Data/March-Madness-2017-master/PrecomputedMatrices/yTrain.npy')
 
-# import numpy as np
-# xTrain = np.load('Data/March-Madness-2017-master/PrecomputedMatrices/xTrain.npy')
-# yTrain = np.load('Data/March-Madness-2017-master/PrecomputedMatrices/yTrain.npy')
+        xTrain = np.load('xTrain.npy')
+        yTrain = np.load('yTrain.npy')
+    return xTrain, yTrain
 
-
+training_data = get_x_and_y(True)
+xTrain = training_data[0]
+yTrain = training_data[1]
+xTrainNorm = normalizeInput(xTrain)
 print("xTrain shape: ",xTrain.shape,"\nyTrain shape: ",yTrain.shape)
 
-
 # These are the different models I tried. Simply uncomment the model that you want to try.
-#TODO utilize cross validation
-model = tree.DecisionTreeClassifier()
+# TODO utilize cross validation
+# models = [tree.DecisionTreeClassifier(),AdaBoostClassifier(n_estimators=100),RandomForestClassifier(n_estimators=64),KNeighborsClassifier(n_neighbors=39)]
+# model = tree.DecisionTreeClassifier()
 # model = tree.DecisionTreeRegressor()
 # model = linear_model.LogisticRegression()
+# model = linear_model.LinearRegression()
 # model = linear_model.BayesianRidge()
 # model = linear_model.Lasso()
 # model = svm.SVC()
@@ -975,7 +1027,8 @@ model = tree.DecisionTreeClassifier()
 # model = AdaBoostClassifier(n_estimators=100)
 # model = GradientBoostingClassifier(n_estimators=100)
 # model = [GradientBoostingRegressor(n_estimators=100, max_depth=5)]
-# model = RandomForestClassifier(n_estimators=64)
+model = RandomForestClassifier(n_jobs=-1,bootstrap=False, max_depth=10, max_features='auto', min_samples_leaf=12,
+                               min_samples_split=15, n_estimators=50)
 # model = KNeighborsClassifier(n_neighbors=39)
 # neuralNetwork(10)
 # model = VotingClassifier(estimators=[('GBR', model1), ('BR', model2), ('KNN', model3)], voting='soft')
@@ -995,26 +1048,90 @@ model = tree.DecisionTreeClassifier()
 # model = GradientBoostingRegressor(n_estimators=100, max_depth=5)
 # model = linear_model.Ridge(alpha = 0.5)
 # TODO utilize the categories or delete them
-categories = ['sos', 'srs', 'totalPoss', 'totalfgmPerPoss', 'totalfgaPerPoss', 'totalfgm3PerPoss', 'totalfga3PerPoss',
-              'totalftmPerPoss',
-              'totalftaPerPoss', 'totalorPerPoss', 'totaldrPerPoss', 'totalastPerPoss', 'totaltoPerPoss',
-              'totalstlPerPoss', 'totalblkPerPoss', 'totalpfPerPoss', 'Location']
-accuracy = []
+# categories = ['sos', 'srs', 'totalPoss', 'totalfgmPerPoss', 'totalfgaPerPoss', 'totalfgm3PerPoss', 'totalfga3PerPoss',
+#               'totalftmPerPoss',
+#               'totalftaPerPoss', 'totalorPerPoss', 'totaldrPerPoss', 'totalastPerPoss', 'totaltoPerPoss',
+#               'totalstlPerPoss', 'totalblkPerPoss', 'totalpfPerPoss', 'Location']
+# define the parameter grid
+# param_grid = {'bootstrap': [False],
+#  'max_depth': [10],
+#  'max_features': ['auto'],
+#  'min_samples_leaf': [8,9,10,11,12,13,14,15,16],
+#  'min_samples_split': [7],
+#  'n_estimators': [50]}
 
-logging.info("Iterating through models")
-for i in range(10):
-    X_train, X_test, Y_train, Y_test = train_test_split(xTrain, yTrain)
-    results = model.fit(X_train, Y_train)
-    preds = model.predict(X_test)
+# import time
+# ts = time.time()
+# logging.info("Started grid search")
+# # create a grid search object
+# grid_search = GridSearchCV(model, param_grid, cv=5, scoring = "f1_micro", verbose=2,n_jobs=-1)
+#
+# # fit the grid search object to the data
+# grid_search.fit(xTrain, yTrain)
+# logging.info(f"Finished grid search in {time.time()-ts}")
 
-    preds[preds < .5] = 0
-    preds[preds >= .5] = 1
-    #TODO try different accuracy measure
-    accuracy.append(np.mean(preds == Y_test))
-    # accuracy.append(np.mean(predictions == Y_test))
-    print("n_estimators - ", 100, " max_depth - ", 5, "Finished iteration:", i, "The accuracy is",
-          sum(accuracy) / len(accuracy))
-print("n_estimators - ", 100, " max_depth - ", 5, "The accuracy is", sum(accuracy) / len(accuracy))
+# print the best parameters
+# print(grid_search.best_params_)
+# After experimenting, {'bootstrap': False, max_depth': 10, 'max_features': auto,
+# 'min_samples_leaf':13 , 'min_samples_split':7 , 'n_estimators': 50}
+# grid_search.best_score_
+
+# from sklearn.feature_selection import RFE
+# rfe_selector = RFE(estimator=RandomForestClassifier(n_jobs=-1,bootstrap=False, max_depth=10, max_features='auto',
+#                                                     min_samples_leaf=12, min_samples_split=15, n_estimators=50),
+#                    step = 1)
+# rfe_selector.fit(xTrain, yTrain)
+# rfe_selector.get_support() #new_vector = [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id),
+# #                                         avgAssists, avgTurnovers, tournamentSeed, getTourneyAppearances(team_id),
+# #                                         totalPoss, totalfgmPerPoss, totalftmPerPoss, totaldrPerPoss, totalastPerPoss]
+
+# accuracy = {}
+#
+# _scoring = ['accuracy', 'precision', 'recall', 'f1']
+#
+# results = cross_validate(estimator=model,
+#                            X=xTrain,
+#                            y=yTrain,
+#                            cv=5,
+#                            scoring=_scoring,
+#                            return_train_score=True)
+# accuracy[type(model).__name__+"trainf1"]=results['train_f1']
+# accuracy[type(model).__name__+"testf1"]=results['test_f1']
+# accuracy[type(model).__name__+"train_precision"]=results['train_precision']
+# accuracy[type(model).__name__+"test_precision"]=results['test_precision']
+# accuracy[type(model).__name__+"train_recall"]=results['train_recall']
+# accuracy[type(model).__name__+"test_recall"]=results['test_recall']
+#
+# print(f"Random Forest's f1 score is {accuracy['RandomForestClassifiertrainf1'].mean()}")
+# print(f"K Neighbors f1 score is {accuracy['KNeighborsClassifiertrainf1'].mean()}")
+# print(f"Logistic Regression f1 score is {accuracy['LogisticRegressiontrainf1'].mean()}")
+# print(f"Gradient Boost f1 score is {accuracy['GradientBoostingClassifiertrainf1'].mean()}")
+#
+# print(f"Random Forest's recall score is {accuracy['RandomForestClassifiertrain_recall'].mean()}")
+# print(f"K Neighbors recall score is {accuracy['KNeighborsClassifiertrain_recall'].mean()}")
+# print(f"Logistic Regression recall score is {accuracy['LogisticRegressiontrain_recall'].mean()}")
+# print(f"Gradient Boost recall score is {accuracy['GradientBoostingClassifiertrain_recall'].mean()}")
+#
+# print(f"Random Forest's precision score is {accuracy['RandomForestClassifiertrain_precision'].mean()}")
+# print(f"K Neighbors precision score is {accuracy['KNeighborsClassifiertrain_precision'].mean()}")
+# print(f"Logistic Regression precision score is {accuracy['LogisticRegressiontrain_precision'].mean()}")
+# print(f"Gradient Boost precision score is {accuracy['GradientBoostingClassifiertrain_precision'].mean()}")
+
+# x_Train,y_Train,x_Test,y_Test = train_test_split()
+# logging.info("Iterating through models")
+# for i in range(10):
+#     X_train, X_test, Y_train, Y_test = train_test_split(xTrain, yTrain)
+#     results = model.fit(X_train, Y_train)
+#     preds = model.predict(X_test)
+#
+#     preds[preds < .5] = 0
+#     preds[preds >= .5] = 1
+#     #TODO try different accuracy measure
+#     accuracy.append(np.mean(preds == Y_test))
+#     # accuracy.append(np.mean(predictions == Y_test))
+#     print("n_estimators - ", 100, " max_depth - ", 5, "Finished iteration:", i, "The accuracy is",
+#           sum(accuracy) / len(accuracy))
+# print("n_estimators - ", 100, " max_depth - ", 5, "The accuracy is", sum(accuracy) / len(accuracy))
 
 
 
@@ -1027,38 +1144,40 @@ print("n_estimators - ", 100, " max_depth - ", 5, "The accuracy is", sum(accurac
 #showFeatureImportance(['Wins','SOS','SRS','location'])
 
 
-#TODO make sure to normalize this too
+model.fit(xTrainNorm,yTrain)
 
 
 
 # This can be used to predict 2022 games
-team1_name = "Duke"
-team2_name = "Arizona"
+team1_name = "Creighton"
+team2_name = "San Diego St"
 team1_vector = get2022Data(teams_pd[teams_pd['Team_Name'] == team1_name].values[0][0])
 team2_vector = get2022Data(teams_pd[teams_pd['Team_Name'] == team2_name].values[0][0])
-print ('Probability that ' + team1_name + ' wins:', predictGame(team1_vector, team2_vector, 0)[0])
+
+print ('Probability that ' + team1_name + ' wins:', predictGame(team1_vector, team2_vector, 0))
 
 
 
 
 # TODO uncomment to create submission for Kaggle
-# submission=pd.read_csv("C:/Users/Lenovo/Documents/MDataFiles_Stage2/MSampleSubmissionStage2.csv")
-# submission
+submission=pd.read_csv("C:/Users/Lenovo/Documents/MDataFiles_Stage2/MSampleSubmissionStage2.csv")
+submission
 #
 #
 #
-# preds=[]
-# for i in range(2278):
-#     vector1=get2022Data(int(submission.iloc[i][0][5:9]))
-#     vector2=get2022Data(int(submission.iloc[i][0][10:14]))
-#     pred=predictGame(vector1, vector2, 0)[0]
-#     preds.append(pred)
-# submission["Pred"]=preds
+logging.info("Creating submission csv")
+preds=[]
+for i in range(2278):
+    vector1=get2022Data(int(submission.iloc[i][0][5:9]))
+    vector2=get2022Data(int(submission.iloc[i][0][10:14]))
+    pred=predictGame(vector1, vector2, 0)
+    preds.append(pred)
+submission["Pred"]=preds
 #
 #
 #
-# submission.tail()
+submission.tail()
 
 
-
-# submission.to_csv("C:/Users/Lenovo/Documents/2022MarchMadnessKaggleLMR.csv")
+submission.to_csv("files/2022MarchMadnessKaggleLMR.csv")
+logging.info("Submission csv created successfully")
