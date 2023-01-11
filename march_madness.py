@@ -534,19 +534,25 @@ def getSeasonData(team_id: int, year: int, cleaned_features=False) -> List[float
         totalstlPerPoss = totalStl / totalPoss
         totalblkPerPoss = totalBlk / totalPoss
         totalpfPerPoss = totalPf / totalPoss
-    full_feature_pool = [numWins, totalPointsScored, avgPointsScored, totalPointsAllowed, avgPointsAllowed, totalFgm3,
-                         avg3sMade, totalTo, avgTurnovers, totalAst, avgAssists, totalReb, avgRebounds, totalStl,
-                         avgSteals, totalFgm, totalfgmPerPoss, totalFga, totalfgaPerPoss, totalFgm3, totalfgm3PerPoss,
-                         totalFga3, totalfga3PerPoss, totalFtm, totalftmPerPoss, totalFta, totalftaPerPoss, totalOr,
-                         totalorPerPoss, totalDr, totaldrPerPoss, totalastPerPoss, totaltoPerPoss, totalstlPerPoss,
-                         totalBlk, totalblkPerPoss, totalPf, totalpfPerPoss, checkPower6Conference(team_id),
+    # full_feature_pool = [numWins, totalPointsScored, avgPointsScored, totalPointsAllowed, avgPointsAllowed, totalFgm3,
+    #                      avg3sMade, totalTo, avgTurnovers, totalAst, avgAssists, totalReb, avgRebounds, totalStl,
+    #                      avgSteals, totalFgm, totalfgmPerPoss, totalFga, totalfgaPerPoss, totalFgm3, totalfgm3PerPoss,
+    #                      totalFga3, totalfga3PerPoss, totalFtm, totalftmPerPoss, totalFta, totalftaPerPoss, totalOr,
+    #                      totalorPerPoss, totalDr, totaldrPerPoss, totalastPerPoss, totaltoPerPoss, totalstlPerPoss,
+    #                      totalBlk, totalblkPerPoss, totalPf, totalpfPerPoss, checkPower6Conference(team_id),
+    #                      tournamentSeed, getTourneyAppearances(team_id), sos, srs]
+    full_feature_pool = [numWins, totalPointsScored, totalPointsAllowed, totalFgm3,
+                         totalTo, totalAst, totalReb, totalStl,
+                         totalFgm, totalFga, totalFgm3,
+                         totalFga3,  totalFtm,  totalFta,  totalOr,
+                          totalDr,
+                         totalBlk,  totalPf,  checkPower6Conference(team_id),
                          tournamentSeed, getTourneyAppearances(team_id), sos, srs]
     if cleaned_features == True:
         # This is after RFE on training data normalized with the mean
-        features = [numWins, avgPointsScored, avgPointsAllowed, checkPower6Conference(team_id), avgAssists,
-                    avgTurnovers,
-                    tournamentSeed, getTourneyAppearances(team_id), totalfgmPerPoss, totalftmPerPoss, totalftaPerPoss,
-                    totaldrPerPoss, totalastPerPoss]
+        features = [numWins, totalPointsScored, avgPointsScored, totalPointsAllowed, avgPointsAllowed, totalAst,
+                    totalReb, totalFgm, totalfgmPerPoss, totalFtm, totalDr, totaldrPerPoss,
+                    checkPower6Conference(team_id), tournamentSeed, getTourneyAppearances(team_id), sos, srs]
     else:
         features = full_feature_pool
 
@@ -965,7 +971,7 @@ def get_x_and_y(load_model):
         yTrain = np.load('yTrain.npy')
     return xTrain, yTrain
 
-training_data = get_x_and_y(True)
+training_data = get_x_and_y(False)
 xTrain = training_data[0]
 yTrain = training_data[1]
 xTrainNorm = normalizeInput(xTrain)
