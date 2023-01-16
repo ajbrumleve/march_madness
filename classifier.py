@@ -3,7 +3,7 @@ import time
 
 import pandas as pd
 from sklearn.feature_selection import RFECV
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, cross_validate
 
 
 class Classifier:
@@ -19,7 +19,7 @@ class Classifier:
         self.yTrain = yTrain
         self.features = pd.DataFrame(features)
 
-    def gridSearch(self, paramgrid=None, cv=5, scoring="f1_micro", verbose=2, n_jobs=-1):
+    def gridSearch(self, paramgrid=None, cv=5, scoring="f1_micro", verbose=2, n_jobs=3):
         if paramgrid is not None:
             param_grid = paramgrid
         else:
@@ -40,7 +40,7 @@ class Classifier:
         print(grid_search.best_score_)
         self.model = grid_search.best_estimator_
 
-    def RFECVSelect(self, min_features_to_select=5, step=1, n_jobs=-1, scoring="f1_micro", cv=5):
+    def RFECVSelect(self, min_features_to_select=5, step=1, n_jobs=3, scoring="f1_micro", cv=5):
         rfe_selector = RFECV(estimator=self.model, min_features_to_select=min_features_to_select, step=step,
                              n_jobs=n_jobs, scoring=scoring, cv=cv,verbose=2)
         ts = time.time()
@@ -52,3 +52,25 @@ class Classifier:
 
         logging.info(f"Finished RFECV in {time.time()-ts}")
         return rfe_selector
+
+    def analyze_model(self):
+        accuracy = {}
+
+        _scoring = ['accuracy', 'precision', 'recall', 'f1']
+
+        results = cross_validate(estimator=self.model,
+                                   X=self.xTrain,
+                                   y=self.yTrain,
+                                   cv=5,
+                                   scoring=_scoring,
+                                   return_train_score=True)
+        accuracy[type(self.model).__name__+"trainf1"]=results['train_f1']
+        accuracy[type(self.model).__name__+"testf1"]=results['test_f1']
+        accuracy[type(self.model).__name__+"train_precision"]=results['train_precision']
+        accuracy[type(self.model).__name__+"test_precision"]=results['test_precision']
+        accuracy[type(self.model).__name__+"train_recall"]=results['train_recall']
+        accuracy[type(self.model).__name__+"test_recall"]=results['test_recall']
+        print(f"The difference from train to test f1 is {results['train_f1'].mean()-results['test_f1'].mean()}")
+        print(f"The difference from train to test precision is {results['train_precision'].mean()-results['test_precision'].mean()}")
+        print(f"The difference from train to test recall is {results['train_recall'].mean()-results['test_recall'].mean()}")
+        return accuracy
