@@ -167,7 +167,7 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 <!-- CONTACT -->
 ## Contact
 
-Andrew Brumleve - [@yAndrewBrumleve](https://twitter.com/AndrewBrumleve) - ajbrumleve@gmail.com
+Andrew Brumleve - [@AndrewBrumleve](https://twitter.com/AndrewBrumleve) - ajbrumleve@gmail.com
 
 Project Link: [https://github.com/ajbrumleve/march_madness](https://github.com/ajbrumleve/march_madness)
 
