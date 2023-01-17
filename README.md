@@ -211,7 +211,7 @@ Project Link: [https://github.com/ajbrumleve/march_madness](https://github.com/a
 [issues-shield]: https://img.shields.io/github/issues/ajbrumleve/march_madness.svg?style=for-the-badge
 [issues-url]: https://github.com/ajbrumleve/march_madness/issues
 [license-shield]: https://img.shields.io/github/license/ajbrumleve/march_madness.svg?style=for-the-badge
-[license-url]: https://github.com/ajbrumleve/march_madness/blob/main/LICENSE
+[license-url]: https://github.com/ajbrumleve/march_madness/blob/master/LICENSE
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: (https://www.linkedin.com/in/andrew-brumleve-574239227/)
 [product-screenshot]: images/screenshot.png
