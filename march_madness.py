@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pickle
 
+import dill
+
 import classifier
 import pandas as pd
 import numpy as np
@@ -16,12 +18,7 @@ from sklearn import svm
 from sklearn.svm import SVC
 from sklearn import linear_model
 from sklearn import tree
-from keras.models import Sequential
-from keras.layers import Convolution2D, MaxPooling2D, Convolution1D
-from keras.layers import Activation, Dropout, Flatten, Dense
-from keras.optimizers import SGD
 from sklearn.model_selection import cross_val_score
-from keras.utils import np_utils
 from sklearn.neighbors import KNeighborsClassifier
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
@@ -1080,7 +1077,9 @@ class Data:
         except:
             logging.error("Tried to reference rfecv with flag set to False")
 
-        pickle.dump(self, open("2023_march_madness.pickle", 'wb'),protocol=pickle.HIGHEST_PROTOCOL)
+        # pickle.dump(self, open("2023_march_madness.pickle", 'wb'),protocol=pickle.HIGHEST_PROTOCOL)
+        with open('2023_march_madness.dill', 'wb') as file:
+            pickle.dump(self, file)
         return self.clsf
 
 
@@ -1107,7 +1106,9 @@ class Data:
             submission.to_csv(file_out)
             logging.info("Submission csv created successfully")
 
-
+if __name__ == "__main__":
+    data_obj = Data()
+    classifier = data_obj.build_model(False,2003,2022,True,True,False)
 def load_model():
     try:
         file =  open("2023_march_madness.dill","rb")

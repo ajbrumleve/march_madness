@@ -1,5 +1,6 @@
 import wx
 import dill
+import logging
 import pandas as pd
 import march_madness
 
@@ -17,7 +18,8 @@ class MainPanel(wx.Panel):
         self.team2 = wx.TextCtrl(self,style=wx.TE_PROCESS_ENTER)
         self.team1 = wx.TextCtrl(self,style=wx.TE_PROCESS_ENTER)
         button = wx.Button(self,label='Predict')
-        self.result_txt = wx.TextCtrl(self,size=(500,400))
+        button2 = wx.Button(self,label='Create Kaggle submission file')
+        self.result_txt = wx.TextCtrl(self,size=(400,100))
         input_sizer1 = wx.BoxSizer(wx.VERTICAL)
         input_sizer2 = wx.BoxSizer(wx.VERTICAL)
         teams_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -31,7 +33,9 @@ class MainPanel(wx.Panel):
         main_sizer.Add(teams_sizer,proportion=.5,flag=wx.ALL|wx.CENTER,border=5)
         main_sizer.Add(button,proportion=.5,flag=wx.ALL|wx.CENTER,border=5)
         main_sizer.Add(self.result_txt,proportion=.5,flag=wx.ALL|wx.CENTER,border=5)
+        main_sizer.Add(button2,proportion=.5, flag=wx.ALL|wx.CENTER,border=25)
         button.Bind(wx.EVT_BUTTON,self.predict)
+        button2.Bind(wx.EVT_BUTTON,self.data_instance.submission)
         self.SetSizer(main_sizer)
 
 
@@ -47,7 +51,7 @@ class MainPanel(wx.Panel):
             self.result_txt.SetValue("One of the schools may be misspelled. Please try again.")
             return
 
-        self.result_txt.SetValue('Probability that ' + team_1_name + ' wins:'+str(self.data_instance.predictGame(team1_vector,team2_vector,0)))
+        self.result_txt.SetValue(f'Probability that {team_1_name} wins is {self.data_instance.predictGame(team1_vector,team2_vector,0)*100}%')
 
 
 class MyFrame(wx.Frame):

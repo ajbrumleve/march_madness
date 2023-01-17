@@ -19,7 +19,7 @@ class Classifier:
         self.yTrain = yTrain
         self.features = pd.DataFrame(features)
 
-    def gridSearch(self, paramgrid=None, cv=5, scoring="f1_micro", verbose=2, n_jobs=3):
+    def gridSearch(self, paramgrid=None, cv=5, scoring="f1_micro", verbose=2, n_jobs=-1):
         if paramgrid is not None:
             param_grid = paramgrid
         else:
@@ -40,7 +40,7 @@ class Classifier:
         print(grid_search.best_score_)
         self.model = grid_search.best_estimator_
 
-    def RFECVSelect(self, min_features_to_select=5, step=1, n_jobs=3, scoring="f1_micro", cv=5):
+    def RFECVSelect(self, min_features_to_select=5, step=1, n_jobs=-1, scoring="f1_micro", cv=5):
         rfe_selector = RFECV(estimator=self.model, min_features_to_select=min_features_to_select, step=step,
                              n_jobs=n_jobs, scoring=scoring, cv=cv,verbose=2)
         ts = time.time()
