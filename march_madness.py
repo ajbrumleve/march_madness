@@ -8,7 +8,6 @@ import classifier
 import pandas as pd
 import numpy as np
 import itertools
-import data
 import collections
 from sklearn.model_selection import cross_val_score, GridSearchCV
 import logging
