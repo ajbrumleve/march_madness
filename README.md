@@ -107,6 +107,11 @@ Use `pip` to install the packages from PyPI:
 ```bash
 pip install dill
 pip install wxPython
+pip install pandas
+pip install scikit-learn
+pip install numpy
+pip install matplotlib
+pip install utils
 ```
 
 
@@ -114,13 +119,19 @@ pip install wxPython
 
 
 
-1. Clone the repo
-   ```sh
-   git clone https://github.com/ajbrumleve/march_madness.git
-   ```
-2. Run `main.py` to build model.
-
-3. Once the model is trained, run gui.
+1. Download and unzip [this entire repository from GitHub](https://github.com/ajbrumleve/march_madness), either interactively, or by entering the following in your Terminal.
+    ```bash
+    git clone https://github.com/ajbrumleve/march_madness.git
+    ```
+2. Navigate into the top directory of the repo on your machine
+    ```bash
+    cd march_madness
+    ```
+3. Create a virtualenv and install the package dependencies. If you don't have `pipenv`, you can follow instructions [here](https://pipenv.pypa.io/en/latest/install/) for how to install.
+    ```bash
+    pipenv install
+    ```
+4. Run `main.py` to try prebuilt model. Or run `march_madness.py` to train new model. This can take a long time but feel free to change the flags in the build_model method as described in the Usage section.
 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -130,7 +141,8 @@ pip install wxPython
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-Right now, when you run main.py, you are asked for an artist's name. You can then add multiple other artists as well. Once the scrape is done, the .txt file with the artist's lyrics is found in the lyrics folder. Future runs won't have to scrape again. It is important when you enter an artists name that the spelling matches the file name if it exists in the lyrics folder. For example if the file 'lyrics/The Oh Hellos.txt' exists, the artist's name must be enetered as The Oh Hellos and not Oh Hellos. Once the scraping is done, you can choose how many lines of text to generate. 
+As currently configured, running main.py will load a pretrained model and open an interface to get the odds of two teams. Please note that as of now, these predictions will only work with teams who made the tournment in 2022. If you want to train your own model, run march_madness.py. By default, this runs classifier = data_obj.build_model(False,2003,2022,True,True,False). This builds the training data from all data between 2003 and 2022. It uses recursive feature elimination to choose features and applies a grid search to try and optimize the Random Forest model. These are automated but can be turned off with the parameters in the build_model method. When the program finishes, the model will be saved and accessed by the gui.py file. When you are ready to create a Kaggle submission file, there is a button in the interface which will generate the file based on your model.
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
