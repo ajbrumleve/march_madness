@@ -141,6 +141,9 @@ pip install utils
 <!-- USAGE EXAMPLES -->
 ## Usage
 
+Important Note:
+This repository is current through 2022. When the 2022-2023 season is finished, files will be added for the 2023 Tournament. If you want to try with 2023 data before the files are added, please add this year's data to the files folder.
+
 As currently configured, running main.py will load a pretrained model and open an interface to get the odds of two teams. Please note that as of now, these predictions will only work with teams who made the tournment in 2022. If you want to train your own model, run march_madness.py. By default, this runs classifier = data_obj.build_model(False,2003,2022,True,True,False). This builds the training data from all data between 2003 and 2022. It uses recursive feature elimination to choose features and applies a grid search to try and optimize the Random Forest model. These are automated but can be turned off with the parameters in the build_model method. When the program finishes, the model will be saved and accessed by the gui.py file. When you are ready to create a Kaggle submission file, there is a button in the interface which will generate the file based on your model.
 
 
