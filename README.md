@@ -74,8 +74,6 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
-
 This has been an ongoing project over the years. A few years ago I started working with code I found at https://github.com/adeshpande3/March-Madness-ML. Each year I slightly adapt this code a little more and tweak the features or the model used. I finally decided to clean up the Frankensteins monster the code had become, add some documentation and a basic GUI, and put it out there.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
