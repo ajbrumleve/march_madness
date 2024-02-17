@@ -32,6 +32,7 @@ from sklearn.metrics import classification_report
 import urllib
 from sklearn.svm import LinearSVC
 from utils import *
+import xgboost as xgb
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -53,63 +54,117 @@ class Data:
         self.listBig10teams = []
         self.listBigEastteams = []
         self.rfecv = None
+        self.gender = ""
 
 
-    def read_data(self):
+    def read_data(self,gender):
         # read in data
+        if gender == "men":
+            # read compact data in as DataFrame
+            self.reg_season_compact_pd = pd.read_csv(r'files/MRegularSeasonCompactResults.csv')
+            print("Regular Season Compact\n\n", self.reg_season_compact_pd.head(), )
 
-        # read compact data in as DataFrame
-        self.reg_season_compact_pd = pd.read_csv(r'files/MRegularSeasonCompactResults.csv')
-        print("Regular Season Compact\n\n", self.reg_season_compact_pd.head(), )
+            # read detailed data in as DataFrame
+            self.reg_season_detailed_pd = pd.read_csv('files/MRegularSeasonDetailedResults.csv')
 
-        # read detailed data in as DataFrame
-        self.reg_season_detailed_pd = pd.read_csv('files/MRegularSeasonDetailedResults.csv')
+            pd.set_option('display.max_columns', None)
+            print("Example of a game\n\n", self.reg_season_detailed_pd.loc[1])
 
-        pd.set_option('display.max_columns', None)
-        print("Example of a game\n\n", self.reg_season_detailed_pd.loc[1])
+            # read list of teams
+            self.teams_pd = pd.read_csv('files/MTeams.csv')
 
-        # read list of teams
-        self.teams_pd = pd.read_csv('files/Teams.csv')
+            # make a list of teams
+            self.teamList = self.teams_pd['TeamName'].tolist()
+            print("These are a sample of the teams\n\n", self.teams_pd.tail())
 
-        # make a list of teams
-        self.teamList = self.teams_pd['Team_Name'].tolist()
-        print("These are a sample of the teams\n\n", self.teams_pd.tail())
+            # read tourney compact results
+            self.tourney_compact_pd = pd.read_csv('files/MNCAATourneyCompactResults.csv')
+            print("These are a sample of the compact tourney results\n\n", self.tourney_compact_pd.head())
 
-        # read tourney compact results
-        self.tourney_compact_pd = pd.read_csv('files/MNCAATourneyCompactResults.csv')
-        print("These are a sample of the compact tourney results\n\n", self.tourney_compact_pd.head())
+            # read tourney detailed results
+            self.tourney_detailed_pd = pd.read_csv('files/MNCAATourneyDetailedResults.csv')
+            print("These are a sample of the detailed tourney results\n\n", self.tourney_detailed_pd.head())
 
-        # read tourney detailed results
-        self.tourney_detailed_pd = pd.read_csv('files/MNCAATourneyDetailedResults.csv')
-        print("These are a sample of the detailed tourney results\n\n", self.tourney_detailed_pd.head())
+            # read tourney seeds
+            self.tourney_seeds_pd = pd.read_csv('files/MNCAATourneySeeds.csv')
+            print("These are a sample of the tourney seeds\n\n", self.tourney_seeds_pd.head())
 
-        # read tourney seeds
-        self.tourney_seeds_pd = pd.read_csv('files/MNCAATourneySeeds.csv')
-        print("These are a sample of the tourney seeds\n\n", self.tourney_seeds_pd.head())
+            # read tourney slots
+            self.tourney_slots_pd = pd.read_csv('files/MNCAATourneySlots.csv')
+            print("These are a sample of the tourney slots\n\n", self.tourney_slots_pd.head())
 
-        # read tourney slots
-        self.tourney_slots_pd = pd.read_csv('files/MNCAATourneySlots.csv')
-        print("These are a sample of the tourney slots\n\n", self.tourney_slots_pd.head())
+            # read conference info
+            self.conference_pd = pd.read_csv('files/Conferences.csv')
+            print("This is a sample of the conference information\n\n", self.conference_pd.head())
 
-        # read conference info
-        self.conference_pd = pd.read_csv('files/Conference.csv')
-        print("This is a sample of the conference information\n\n", self.conference_pd.head())
+            # read tourney results
+            # self.tourney_results_pd = pd.read_csv('files/TourneyResults.csv')
+            # print("These are a sample of the tourney results\n\n", self.tourney_results_pd.head())
+            # NCAAChampionsList = self.tourney_results_pd['NCAA Champion'].tolist()
+            # logging.info("Data read successfully")
 
-        # read tourney results
-        self.tourney_results_pd = pd.read_csv('files/TourneyResults.csv')
-        print("These are a sample of the tourney results\n\n", self.tourney_results_pd.head())
-        NCAAChampionsList = self.tourney_results_pd['NCAA Champion'].tolist()
-        logging.info("Data read successfully")
+            # add possession columns to dataframes
+            self.reg_season_detailed_pd = self.add_poss_stats(self.reg_season_detailed_pd)
+            print("This is the new reg season dataframe with all the per possession columns added\n\n",
+                  self.reg_season_detailed_pd.head())
 
-        # add possession columns to dataframes
-        self.reg_season_detailed_pd = self.add_poss_stats(self.reg_season_detailed_pd)
-        print("This is the new reg season dataframe with all the per possession columns added\n\n",
-              self.reg_season_detailed_pd.head())
+            self.tourney_detailed_pd = self.add_poss_stats(self.tourney_detailed_pd)
+            print("This is the new tourney results dataframe with all the per possession columns added\n\n",
+                  self.tourney_detailed_pd.head())
+            return
+        elif gender == "women":
+            # read compact data in as DataFrame
+            self.reg_season_compact_pd = pd.read_csv(r'files/WRegularSeasonCompactResults.csv')
+            print("Regular Season Compact\n\n", self.reg_season_compact_pd.head(), )
 
-        self.tourney_detailed_pd = self.add_poss_stats(self.tourney_detailed_pd)
-        print("This is the new tourney results dataframe with all the per possession columns added\n\n",
-              self.tourney_detailed_pd.head())
-        return
+            # read detailed data in as DataFrame
+            self.reg_season_detailed_pd = pd.read_csv('files/WRegularSeasonDetailedResults.csv')
+
+            pd.set_option('display.max_columns', None)
+            print("Example of a game\n\n", self.reg_season_detailed_pd.loc[1])
+
+            # read list of teams
+            self.teams_pd = pd.read_csv('files/WTeams.csv')
+
+            # make a list of teams
+            self.teamList = self.teams_pd['TeamName'].tolist()
+            print("These are a sample of the teams\n\n", self.teams_pd.tail())
+
+            # read tourney compact results
+            self.tourney_compact_pd = pd.read_csv('files/WNCAATourneyCompactResults.csv')
+            print("These are a sample of the compact tourney results\n\n", self.tourney_compact_pd.head())
+
+            # read tourney detailed results
+            self.tourney_detailed_pd = pd.read_csv('files/WNCAATourneyDetailedResults.csv')
+            print("These are a sample of the detailed tourney results\n\n", self.tourney_detailed_pd.head())
+
+            # read tourney seeds
+            self.tourney_seeds_pd = pd.read_csv('files/WNCAATourneySeeds.csv')
+            print("These are a sample of the tourney seeds\n\n", self.tourney_seeds_pd.head())
+
+            # read tourney slots
+            self.tourney_slots_pd = pd.read_csv('files/WNCAATourneySlots.csv')
+            print("These are a sample of the tourney slots\n\n", self.tourney_slots_pd.head())
+
+            # read conference info
+            self.conference_pd = pd.read_csv('files/Conferences.csv')
+            print("This is a sample of the conference information\n\n", self.conference_pd.head())
+
+            # read tourney results
+            # self.tourney_results_pd = pd.read_csv('files/TourneyResults.csv')
+            # print("These are a sample of the tourney results\n\n", self.tourney_results_pd.head())
+            # NCAAChampionsList = self.tourney_results_pd['NCAA Champion'].tolist()
+            # logging.info("Data read successfully")
+
+            # add possession columns to dataframes
+            self.reg_season_detailed_pd = self.add_poss_stats(self.reg_season_detailed_pd)
+            print("This is the new reg season dataframe with all the per possession columns added\n\n",
+                  self.reg_season_detailed_pd.head())
+
+            self.tourney_detailed_pd = self.add_poss_stats(self.tourney_detailed_pd)
+            print("This is the new tourney results dataframe with all the per possession columns added\n\n",
+                  self.tourney_detailed_pd.head())
+            return
 
     def add_poss_stats(self,df: pd.DataFrame) -> pd.DataFrame:
         """Adds possession statistics to dataframe
@@ -183,7 +238,10 @@ class Data:
             int
         """
 
-        teamName = self.teams_pd.values[team_id-1101][1]
+        try:
+            teamName = self.teams_pd.values[team_id-1101][1]
+        except:
+            teamName = self.teams_pd.values[team_id - 3101][1]
         if (teamName in self.listACCteams or teamName in self.listBig10teams or teamName in self.listBig12teams
            or teamName in self.listSECteams or teamName in self.listPac12teams or teamName in self.listBigEastteams):
             return 1
@@ -198,7 +256,7 @@ class Data:
         Returns:
             int
         """
-        return self.teams_pd[self.teams_pd['Team_Name'] == name].values[0][0]
+        return self.teams_pd[self.teams_pd['TeamName'] == name].values[0][0]
 
 
     def getTeamName(self,team_id: int) -> str:
@@ -210,7 +268,7 @@ class Data:
             str
         """
 
-        return self.teams_pd[self.teams_pd['Team_Id'] == team_id].values[0][1]
+        return self.teams_pd[self.teams_pd['TeamID'] == team_id].values[0][1]
 
 
     def getNumChampionships(self,team_id: int) -> int:
@@ -525,9 +583,12 @@ class Data:
         totalPointsAllowed = gamesWon['LScore'].sum()
         totalPointsAllowed += gamesLost['WScore'].sum()
         try:
-            stats_SOS_pd = pd.read_csv('files/MMStats/MMStats_'+str(year)+'.csv')
+            stats_SOS_pd = pd.read_csv(f'files/MMStats/{self.gender}/MMStats_{str(year)}.csv')
+            stats_SOS_pd = stats_SOS_pd.rename(columns={"school_name": "School"})
             stats_SOS_pd = self.handleDifferentCSV(stats_SOS_pd)
-            ratings_pd = pd.read_csv('files/RatingStats/RatingStats_'+str(year)+'.csv')
+            ratings_pd = pd.read_csv(f'files/RatingStats/{self.gender}/RatingStats_{str(year)}.csv')
+            ratings_pd = ratings_pd.rename(columns={"school_name": "School", "Unnamed: 0":"Rk"})
+            ratings_pd["Rk"]=ratings_pd["Rk"]+1
             ratings_pd = self.handleDifferentCSV(ratings_pd)
             name = self.getTeamName(team_id)
             team = stats_SOS_pd[stats_SOS_pd['School'] == name]
@@ -536,8 +597,8 @@ class Data:
                 sos = 0
                 srs = 0
             else:
-                sos = team['SOS'].values[0]
-                srs = team['SRS'].values[0]
+                sos = team['sos'].values[0]
+                srs = team['srs'].values[0]
             tournamentSeed = math.floor(ratings_pd[ratings_pd["School"] ==  name]["Rk"]/4)
         except:
             # logging.info(f"There is no MM file for {year}")
@@ -613,6 +674,12 @@ class Data:
                              totalftaPerPoss, totalorPerPoss, totaldrPerPoss, totalastPerPoss, totaltoPerPoss,
                              totalstlPerPoss, totalblkPerPoss, totalpfPerPoss, self.checkPower6Conference(team_id),
                              tournamentSeed, self.getTourneyAppearances(team_id), sos, srs]
+        # Removed tournament seeding
+        full_feature_pool = [numWins, totalfgmPerPoss, totalfgaPerPoss, totalfgm3PerPoss, totalfga3PerPoss,
+                             totalftmPerPoss,
+                             totalftaPerPoss, totalorPerPoss, totaldrPerPoss, totalastPerPoss, totaltoPerPoss,
+                             totalstlPerPoss, totalblkPerPoss, totalpfPerPoss, self.checkPower6Conference(team_id),
+                             self.getTourneyAppearances(team_id), sos, srs]
 
         if cleaned_features == True:
             # This is after RFE on training data normalized with the mean
@@ -703,6 +770,9 @@ class Data:
     #     return float_features
     #
 
+
+
+
     def compareTwoTeams(self,id_1: int, id_2: int, year: int) -> List[float]:
         """Compares two teams in a given year and gives a combined vector for the matchup
 
@@ -736,7 +806,7 @@ class Data:
 
         seasonDictionary = collections.defaultdict(list)
         for team in self.teamList:
-            team_id = self.teams_pd[self.teams_pd['Team_Name'] == team].values[0][0]
+            team_id = self.teams_pd[self.teams_pd['TeamName'] == team].values[0][0]
             team_vector = self.getSeasonData(team_id, year)
             seasonDictionary[team_id] = team_vector
         return seasonDictionary
@@ -933,7 +1003,25 @@ class Data:
 
         probability_team_1 = (self.clsf.model.predict_proba([diff.loc[0]])[0][1])
 
-        return probability_team_1
+        diff_rev = [a - b for a, b in zip(team_2_vector, team_1_vector)]
+        home_flip = home
+        if home == 1:
+            home_flip = -1
+        elif home == -1:
+            home_flip = 1
+        diff_rev.append(float(home_flip))
+        diff_rev = pd.DataFrame(diff_rev).T
+        if self.rfecv is not None:
+            diff_rev = diff_rev[self.rfecv.get_support(indices=True)]
+            diff_rev = (diff_rev - self.training_min[self.rfecv.get_support(indices=True)]) / (
+                        self.training_max[self.rfecv.get_support(indices=True)] - self.training_min[
+                    self.rfecv.get_support(indices=True)])
+        else:
+            diff_rev = (diff_rev - self.training_min) / (self.training_max - self.training_min)
+
+        probability_team_2 = (self.clsf.model.predict_proba([diff_rev.loc[0]])[0][1])
+        avg_prob = (probability_team_1 + 1 - probability_team_2) / 2
+        return avg_prob
         #return model.predict_proba([diff])
 
     #TODO experiment with the range of years which leads to the best results
@@ -952,27 +1040,29 @@ class Data:
             logging.info("Creating training set")
             self.xTrain, self.yTrain = self.createTrainingSet(years_to_train)
             logging.info("Training set created")
-            np.save('xTrain', self.xTrain)
-            np.save('yTrain', self.yTrain)
+            np.save(f'{self.gender}xTrain', self.xTrain)
+            np.save(f'{self.gender}yTrain', self.yTrain)
         else:
-            self.xTrain = np.load('xTrain.npy')
-            self.yTrain = np.load('yTrain.npy')
+            self.xTrain = np.load(f'{self.gender}xTrain.npy')
+            self.yTrain = np.load(f'{self.gender}yTrain.npy')
         return self.xTrain, self.yTrain
 
-    def build_model(self,prebuilt_data: bool,first_year: int,last_year: int, gridsearch_flag: bool, rfecv_flag: bool,
+    def build_model(self, gender: str, prebuilt_data: bool,first_year: int,last_year: int, gridsearch_flag: bool, rfecv_flag: bool,
                     analyze_flag: bool) -> classifier.Classifier:
         """
         Full program. Reads data, builds Random Forests model.
 
         Flags allow for automated parameter tuning using gridsearch. Feature selection and feature selection
         Args:
+            gender (str): men or women
             load_model (bool): If True, load prebuilt data
             start_year (int): first year in dataset
             end_year (int): last year in dataset
         Returns:
             Tuple[np.array,np.array]
         """
-        self.read_data()
+        self.gender = gender
+        self.read_data(gender)
 
         #create lists of teams in major conferences
         self.listACCteams = ['North Carolina','Virginia','Florida St','Louisville','Notre Dame','Syracuse','Duke','Virginia Tech','Georgia Tech','Miami','Wake Forest','Clemson','NC State','Boston College','Pittsburgh']
@@ -986,22 +1076,31 @@ class Data:
         # TODO this is unused
         # getListForURL(teamList)
 
+        if gender=="men":
+            #test the functions to this point
+            print("The vector for teamID 1103 in 2022 is ",self.getSeasonData(1103,2022))
 
-        #test the functions to this point
-        print("The vector for teamID 1103 in 2022 is ",self.getSeasonData(1103,2022))
-
-        #get kentucky vector from 2021
-        kentucky_id = self.teams_pd[self.teams_pd['Team_Name'] == 'Kentucky'].values[0][0]
-        print("The vector for Kentucky in 2021 is ",self.getSeasonData(kentucky_id, 2021))
-
-
+            #get kentucky vector from 2021
+            kentucky_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kentucky'].values[0][0]
+            print("The vector for Kentucky in 2021 is ",self.getSeasonData(kentucky_id, 2021))
 
 
-        #test comparison of two teams in 2022
-        kansas_id = self.teams_pd[self.teams_pd['Team_Name'] == 'Kansas'].values[0][0]
-        print("The vector for teamIDs 1234 and 1242 in 2022 is ",self.compareTwoTeams(1234, 1242, 2022))
 
 
+            #test comparison of two teams in 2022
+            kansas_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kansas'].values[0][0]
+            print("The vector for teamIDs 1234 and 1242 in 2022 is ",self.compareTwoTeams(1234, 1242, 2022))
+        else:
+            # test the functions to this point
+            print("The vector for teamID 3103 in 2023 is ", self.getSeasonData(3103, 2023))
+
+            # get kentucky vector from 2021
+            kentucky_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kentucky'].values[0][0]
+            print("The vector for Kentucky in 2023 is ", self.getSeasonData(kentucky_id, 2023))
+
+            # test comparison of two teams in 2022
+            kansas_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kansas'].values[0][0]
+            print("The vector for teamIDs 3234 and 3242 in 2023 is ", self.compareTwoTeams(3234, 3242, 2023))
 
         training_data = self.get_x_and_y(prebuilt_data,first_year,last_year)
         self.xTrain = training_data[0]
@@ -1024,14 +1123,15 @@ class Data:
         # model = AdaBoostClassifier(n_estimators=100)
         # model = GradientBoostingClassifier(n_estimators=100)
         # model = [GradientBoostingRegressor(n_estimators=100, max_depth=5)]
-        model = RandomForestClassifier(n_jobs=-1,bootstrap=False, max_depth=10, max_features='auto', min_samples_leaf=12,
-                                       min_samples_split=15, n_estimators=50)
+        model = RandomForestClassifier(n_jobs=-1,bootstrap=False, max_depth=None, max_features='auto', min_samples_leaf=20,
+                                       min_samples_split=9, n_estimators=150)
         # model = KNeighborsClassifier(n_neighbors=39)
         # neuralNetwork(10)
         # model = VotingClassifier(estimators=[('GBR', model1), ('BR', model2), ('KNN', model3)], voting='soft')
         # model = LinearSVC(penalty='l2', loss='squared_hinge', dual=True, tol=0.0001, C=0.1)
         # model = GradientBoostingRegressor(n_estimators=100, max_depth=5)
         # model = linear_model.Ridge(alpha = 0.5)
+        model = xgb.XGBClassifier(verbosity=1,n_jobs=-1)
         # TODO utilize the categories or delete them
 
         self.clsf = classifier.Classifier(model,self.xTrainNorm,self.yTrain,["numWins", "totalPointsScored", "avgPointsScored",
@@ -1046,15 +1146,18 @@ class Data:
                                                           "totalpfPerPoss", "checkPower6Conference(team_id)", "tournamentSeed",
                                                           "getTourneyAppearances(team_id)", "sos", "srs","location"])
 
+        # paramgrid = {'bootstrap': [True, False],
+        #              'max_depth': [10, None],
+        #              'max_features': ['auto'],
+        #              'min_samples_leaf': [10, 20],
+        #              'min_samples_split': [5, 9],
+        #              'n_estimators': [50, 150]}
         if gridsearch_flag == True:
-            self.clsf.gridSearch(paramgrid={'bootstrap': [True, False],
-                                  'max_depth': [5,10,None],
-                                  'max_features': ['auto'],
-                                  'min_samples_leaf': [10,15,20],
-                                  'min_samples_split': [5,7,9],
-                                  'n_estimators': [50,100,150]})
+            self.clsf.gridSearch(paramgrid = {'eta': [.3,.5,.7],
+                     'max_depth': [3, 6],
+                     'subsample': [.5,1]})
         if rfecv_flag == True:
-            rfecv = self.clsf.RFECVSelect()
+            self.rfecv = self.clsf.RFECVSelect()
 
         if analyze_flag == True:
             accuracy = self.clsf.analyze_model()
@@ -1066,8 +1169,8 @@ class Data:
         # This can be used to predict 2022 games
         team1_name = "Creighton"
         team2_name = "San Diego St"
-        team1_vector = self.getSeasonData(self.teams_pd[self.teams_pd['Team_Name'] == team1_name].values[0][0],2022)
-        team2_vector = self.getSeasonData(self.teams_pd[self.teams_pd['Team_Name'] == team2_name].values[0][0],2022)
+        team1_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team1_name].values[0][0],2023)
+        team2_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team2_name].values[0][0],2023)
 
         print ('Probability that ' + team1_name + ' wins:', self.predictGame(team1_vector, team2_vector, 0))
         try:
@@ -1077,7 +1180,7 @@ class Data:
             logging.error("Tried to reference rfecv with flag set to False")
 
         # pickle.dump(self, open("2023_march_madness.pickle", 'wb'),protocol=pickle.HIGHEST_PROTOCOL)
-        with open('2023_march_madness.dill', 'wb') as file:
+        with open(f'{self.gender}_noseed_xgb_2023_march_madness.dill', 'wb') as file:
             pickle.dump(self, file)
         return self.clsf
 
@@ -1085,16 +1188,17 @@ class Data:
 
 
 
-    def submission(self,file_out="files/2022MarchMadnessKaggleLMR.csv") -> None:
-            submission=pd.read_csv("C:/Users/Lenovo/Documents/MDataFiles_Stage2/MSampleSubmissionStage2.csv")
+    def submission(self,file_out="files/2023MarchMadnessKaggleLMR.csv") -> None:
+            submission=pd.read_csv("files/SampleSubmission2023.csv")
             submission
             logging.info("Creating submission csv")
             preds=[]
-            for i in range(2278):
-                vector1=self.getSeasonData(int(submission.iloc[i][0][5:9]),2022)
-                vector2=self.getSeasonData(int(submission.iloc[i][0][10:14]),2022)
-                pred=self.predictGame(vector1, vector2, 0)
-                preds.append(pred)
+            for i in range(130683):
+                if submission.iloc[i][0][5] == "1":
+                    vector1=self.getSeasonData(int(submission.iloc[i][0][5:9]),2023)
+                    vector2=self.getSeasonData(int(submission.iloc[i][0][10:14]),2023)
+                    pred=self.predictGame(vector1, vector2, 0)
+                    preds.append(pred)
             submission["Pred"]=preds
             #
             #
@@ -1105,15 +1209,72 @@ class Data:
             submission.to_csv(file_out)
             logging.info("Submission csv created successfully")
 
+
+
 if __name__ == "__main__":
-    data_obj = Data()
-    classifier = data_obj.build_model(False,2003,2022,True,True,False)
+    men_data_obj = Data()
+    women_data_obj = Data()
+    men_classifier = men_data_obj.build_model("men",True,2003,2023,True,True,True)
+    women_classifier = women_data_obj.build_model("women",True,2010,2023,True,True,True)
+    season_dict = createSeasonDict()
+    createSubmission(men_data_obj,women_data_obj)
+
+
 def load_model():
     try:
-        file =  open("2023_march_madness.dill","rb")
+        file = open("combined_2023_march_madness.dill", "rb")
         run = dill.load(file)
         file.close()
         return run
     except:
         logging.error("No saved model. Building model.")
         return
+def createSeasonDict():
+    season_dict = {}
+    for i in range(len(men_data_obj.teams_pd)):
+        id = men_data_obj.teams_pd["TeamID"][i]
+        season_dict[id] = men_data_obj.getSeasonData(id, 2023)
+        print(i)
+
+    for i in range(len(women_data_obj.teams_pd)):
+        id = women_data_obj.teams_pd["TeamID"][i]
+        season_dict[id] = women_data_obj.getSeasonData(id, 2023)
+        print(i)
+    return season_dict
+
+
+def submission1(string):
+    vector1 = season_dict[int(string[5:9])]
+    vector2 = season_dict[int(string[10:14])]
+    prediction = men_data_obj.predictGame(vector1, vector2, 0)
+    return prediction
+
+
+def submission2(string):
+    vector1 = season_dict[int(string[5:9])]
+    vector2 = season_dict[int(string[10:14])]
+    prediction = women_data_obj.predictGame(vector1, vector2, 0)
+    return prediction
+def createSubmission(mens_model, womens_model,file_out="files/2023NoSeedMarchMadnessKaggleLMR.csv") -> None:
+        submission=pd.read_csv("files/SampleSubmission2023.csv")
+        sub_men = submission[:65703]
+        sub_women = submission[65703:]
+        logging.info("Creating submission csv")
+        sub_men["pred2"] = sub_men["ID"].apply(submission1)
+        sub_women["pred2"] = sub_women["ID"].apply(submission2)
+        new_preds = sub_men["pred2"].append(sub_women["pred2"])
+        submission["pred"] = new_preds
+        submission.drop(["Pred"], axis=1)
+        submission = submission.copy().drop(["Pred"], axis=1)
+        submission = submission.copy().rename(columns={"pred": "Pred"})
+        submission.to_csv("files/2023NoSeedMarchMadnessKaggleLMR.csv", index=False)
+
+
+
+        submission.to_csv(file_out)
+        logging.info("Submission csv created successfully")
+
+def xgBoost():
+    import xgboost as xgb
+    xgb_model = xgb.XGBClassifier(verbosity=2)
+    xgb_model.fit(X_train, y_train)
