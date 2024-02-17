@@ -3,11 +3,14 @@ import time
 
 import pandas as pd
 from sklearn.feature_selection import RFECV
+from sklearn.metrics import brier_score_loss, make_scorer
 from sklearn.model_selection import GridSearchCV, cross_validate
+
 
 
 class Classifier:
     def __init__(self, model, xTrain, yTrain, features):
+        brier_scorer = make_scorer(brier_score_loss, greater_is_better=False)
         self.paramGrid = {'bootstrap': [False],
                           'max_depth': [10],
                           'max_features': ['auto'],
@@ -19,7 +22,7 @@ class Classifier:
         self.yTrain = yTrain
         self.features = pd.DataFrame(features)
 
-    def gridSearch(self, paramgrid=None, cv=5, scoring="f1_micro", verbose=2, n_jobs=-1):
+    def gridSearch(self, paramgrid=None, cv=5, scoring="neg_brier_score", verbose=2, n_jobs=-1):
         if paramgrid is not None:
             param_grid = paramgrid
         else:
@@ -40,7 +43,7 @@ class Classifier:
         print(grid_search.best_score_)
         self.model = grid_search.best_estimator_
 
-    def RFECVSelect(self, min_features_to_select=5, step=1, n_jobs=-1, scoring="f1_micro", cv=5):
+    def RFECVSelect(self, min_features_to_select=5, step=1, n_jobs=-1, scoring="neg_brier_score", cv=5):
         rfe_selector = RFECV(estimator=self.model, min_features_to_select=min_features_to_select, step=step,
                              n_jobs=n_jobs, scoring=scoring, cv=cv,verbose=2)
         ts = time.time()
@@ -56,7 +59,7 @@ class Classifier:
     def analyze_model(self):
         accuracy = {}
 
-        _scoring = ['accuracy', 'precision', 'recall', 'f1']
+        _scoring = ['accuracy', 'precision', 'recall', 'f1',"neg_brier_score"]
 
         results = cross_validate(estimator=self.model,
                                    X=self.xTrain,
@@ -70,7 +73,10 @@ class Classifier:
         accuracy[type(self.model).__name__+"test_precision"]=results['test_precision']
         accuracy[type(self.model).__name__+"train_recall"]=results['train_recall']
         accuracy[type(self.model).__name__+"test_recall"]=results['test_recall']
+        accuracy[type(self.model).__name__+"train_neg_brier_score"]=results['train_neg_brier_score']
+        accuracy[type(self.model).__name__+"test_neg_brier_score"]=results['test_neg_brier_score']
         print(f"The difference from train to test f1 is {results['train_f1'].mean()-results['test_f1'].mean()}")
         print(f"The difference from train to test precision is {results['train_precision'].mean()-results['test_precision'].mean()}")
         print(f"The difference from train to test recall is {results['train_recall'].mean()-results['test_recall'].mean()}")
+        print(f"The difference from train to test brier is {results['train_neg_brier_score'].mean()-results['test_neg_brier_score'].mean()}")
         return accuracy
