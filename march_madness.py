@@ -36,14 +36,15 @@ import xgboost as xgb
 
 logging.basicConfig(level=logging.DEBUG)
 
-
 training_mean = 0
 training_std = 0
 training_min = 0
 training_max = 0
-#TODO add logging
-#TODO add error catching
-#TODO add files to github
+
+
+# TODO add logging
+# TODO add error catching
+# TODO add files to github
 class Data:
     def __init__(self):
         self.listACCteams = []
@@ -56,8 +57,10 @@ class Data:
         self.rfecv = None
         self.gender = ""
 
+    def read_data(self, gender):
+        def filter_by_season(row, tourney_teams):
+            return (row['WTeamID'] in tourney_teams) and (row['LTeamID'] in tourney_teams)
 
-    def read_data(self,gender):
         # read in data
         if gender == "men":
             # read compact data in as DataFrame
@@ -88,6 +91,15 @@ class Data:
             # read tourney seeds
             self.tourney_seeds_pd = pd.read_csv('files/MNCAATourneySeeds.csv')
             print("These are a sample of the tourney seeds\n\n", self.tourney_seeds_pd.head())
+            self.read_ordinals()
+            merged_df = pd.merge(self.reg_season_detailed_pd, self.ordinals, how='left',
+                                 left_on=['Season', 'DayNum', 'WTeamID'],
+                                 right_on=['Season', 'RankingDayNum', 'TeamID'])
+            merged_df = pd.merge(merged_df, self.ordinals, how='left', left_on=['Season', 'DayNum', 'LTeamID'],
+                                 right_on=['Season', 'RankingDayNum', 'TeamID'], suffixes=('_W', '_L'))
+            self.filtered_regular = merged_df[(merged_df['OrdinalRank_W'] < 125) | (merged_df['OrdinalRank_L'] < 125)]
+            # self.filtered_regular = self.reg_season_detailed_pd[self.reg_season_detailed_pd.apply(
+            #     lambda row: filter_by_season(row, set(self.tourney_seeds_pd[self.tourney_seeds_pd['Season'] == row['Season']]['TeamID'])), axis=1)]
 
             # read tourney slots
             self.tourney_slots_pd = pd.read_csv('files/MNCAATourneySlots.csv')
@@ -104,9 +116,9 @@ class Data:
             # logging.info("Data read successfully")
 
             # add possession columns to dataframes
-            self.reg_season_detailed_pd = self.add_poss_stats(self.reg_season_detailed_pd)
+            self.filtered_regular = self.add_poss_stats(self.filtered_regular)
             print("This is the new reg season dataframe with all the per possession columns added\n\n",
-                  self.reg_season_detailed_pd.head())
+                  self.filtered_regular.head())
 
             self.tourney_detailed_pd = self.add_poss_stats(self.tourney_detailed_pd)
             print("This is the new tourney results dataframe with all the per possession columns added\n\n",
@@ -142,6 +154,10 @@ class Data:
             self.tourney_seeds_pd = pd.read_csv('files/WNCAATourneySeeds.csv')
             print("These are a sample of the tourney seeds\n\n", self.tourney_seeds_pd.head())
 
+            self.filtered_regular = self.reg_season_detailed_pd[self.reg_season_detailed_pd.apply(
+                lambda row: filter_by_season(row, set(
+                    self.tourney_seeds_pd[self.tourney_seeds_pd['Season'] == row['Season']]['TeamID'])), axis=1)]
+
             # read tourney slots
             self.tourney_slots_pd = pd.read_csv('files/WNCAATourneySlots.csv')
             print("These are a sample of the tourney slots\n\n", self.tourney_slots_pd.head())
@@ -157,16 +173,40 @@ class Data:
             # logging.info("Data read successfully")
 
             # add possession columns to dataframes
-            self.reg_season_detailed_pd = self.add_poss_stats(self.reg_season_detailed_pd)
+            self.filtered_regular = self.add_poss_stats(self.filtered_regular)
             print("This is the new reg season dataframe with all the per possession columns added\n\n",
-                  self.reg_season_detailed_pd.head())
+                  self.filtered_regular.head())
 
             self.tourney_detailed_pd = self.add_poss_stats(self.tourney_detailed_pd)
             print("This is the new tourney results dataframe with all the per possession columns added\n\n",
                   self.tourney_detailed_pd.head())
             return
 
-    def add_poss_stats(self,df: pd.DataFrame) -> pd.DataFrame:
+    def read_ordinals(self):
+        df = pd.read_csv('files/MMasseyOrdinals.csv')
+        # Create a combination of all possible combinations
+        all_combinations = pd.MultiIndex.from_product([df['Season'].unique(),
+                                                       df['RankingDayNum'].unique(),
+                                                       df['SystemName'].unique(),
+                                                       df['TeamID'].unique()],
+                                                      names=['Season', 'RankingDayNum', 'SystemName', 'TeamID'])
+
+        # Convert to DataFrame
+        all_combinations_df = pd.DataFrame(index=all_combinations).reset_index()
+
+        # Merge with the original DataFrame to fill in missing values
+        merged_df = pd.merge(all_combinations_df, df, how='left',
+                             on=['Season', 'RankingDayNum', 'SystemName', 'TeamID'])
+
+        # Fill in missing values with the previous value for each system
+        merged_df['OrdinalRank'] = merged_df.groupby(['SystemName', 'TeamID'])['OrdinalRank'].fillna(method='ffill')
+
+        # Calculate the average OrdinalRank across all systems for each TeamID on a specific day and season
+        result_df = merged_df.groupby(['Season', 'RankingDayNum', 'TeamID'])['OrdinalRank'].mean().reset_index()
+        self.ordinals = result_df
+        return
+
+    def add_poss_stats(self, df: pd.DataFrame) -> pd.DataFrame:
         """Adds possession statistics to dataframe
 
         This calculates number of possessions and adds columns to indicate possessions and per possession stats
@@ -179,25 +219,25 @@ class Data:
 
         # handle possessions for detailed tourney results
 
-        #adds possession column
+        # adds possession column
         df['Wposs'] = df['WFGA'] - df['WOR'] + df[
             'WTO'] + .44 * df['WFTA']
         df['Lposs'] = df['LFGA'] - df['LOR'] + df[
             'LTO'] + .44 * df['LFTA']
 
-        #determines 1st and 3rd quantiles for possession numbers
+        # determines 1st and 3rd quantiles for possession numbers
         tourney_poss_quantiles = df['Wposs'].quantile([.25, .5, .75])
         tourney_poss_low = tourney_poss_quantiles.iloc[0]
         tourney_poss_mean = tourney_poss_quantiles.iloc[1]
         tourney_poss_high = tourney_poss_quantiles.iloc[2]
 
-        #adds a regularized column for possessions
+        # adds a regularized column for possessions
         df['Wposs_sc'] = (df['Wposs'] - tourney_poss_low) / (
-                    tourney_poss_high - tourney_poss_low)
+                tourney_poss_high - tourney_poss_low)
         df['Lposs_sc'] = (df['Lposs'] - tourney_poss_low) / (
-                    tourney_poss_high - tourney_poss_low)
+                tourney_poss_high - tourney_poss_low)
 
-        #adds columns for stats per possession
+        # adds columns for stats per possession
         df['WfgmPerPoss'] = df['WFGM'] / df['Wposs']
         df['WfgaPerPoss'] = df['WFGA'] / df['Wposs']
         df['Wfgm3PerPoss'] = df['WFGM3'] / df['Wposs']
@@ -227,7 +267,7 @@ class Data:
         df['LpfPerPoss'] = df['LPF'] / df['Lposs']
         return df
 
-    def checkPower6Conference(self,team_id: int) -> int:
+    def checkPower6Conference(self, team_id: int) -> int:
         """Checks if a team is in a power conference
 
         This checks if a team is in oneof the top 6 larger conferenes in the NCAA it returns 1 if so and 0 if not
@@ -239,16 +279,16 @@ class Data:
         """
 
         try:
-            teamName = self.teams_pd.values[team_id-1101][1]
+            teamName = self.teams_pd.values[team_id - 1101][1]
         except:
             teamName = self.teams_pd.values[team_id - 3101][1]
         if (teamName in self.listACCteams or teamName in self.listBig10teams or teamName in self.listBig12teams
-           or teamName in self.listSECteams or teamName in self.listPac12teams or teamName in self.listBigEastteams):
+                or teamName in self.listSECteams or teamName in self.listPac12teams or teamName in self.listBigEastteams):
             return 1
         else:
             return 0
 
-    def getTeamID(self,name: str) -> int:
+    def getTeamID(self, name: str) -> int:
         """Gets team id from name of school
 
         Args:
@@ -258,8 +298,7 @@ class Data:
         """
         return self.teams_pd[self.teams_pd['TeamName'] == name].values[0][0]
 
-
-    def getTeamName(self,team_id: int) -> str:
+    def getTeamName(self, team_id: int) -> str:
         """Gets team name from team id
 
         Args:
@@ -270,8 +309,7 @@ class Data:
 
         return self.teams_pd[self.teams_pd['TeamID'] == team_id].values[0][1]
 
-
-    def getNumChampionships(self,team_id: int) -> int:
+    def getNumChampionships(self, team_id: int) -> int:
         """Gets the number of chapionships won by a team based on team id
 
         Args:
@@ -283,9 +321,8 @@ class Data:
         name = self.getTeamName(team_id)
         return self.NCAAChampionsList.count(name)
 
-
     # Function for handling the annoying cases of Florida and FL, as well as State and St
-    def handleCases(self,arr: list[str]) -> list[str]:
+    def handleCases(self, arr: list[str]) -> list[str]:
         """Handles school names with Florida or State
 
         Some conventions spell out Florida and some use FL. Some spell out State and some use St. This standardizes these
@@ -308,9 +345,7 @@ class Data:
             arr.remove(arr[indices[i] - i])
         return arr
 
-
-
-    def checkConferenceChamp(self,team_id: int, year: int) -> int:
+    def checkConferenceChamp(self, team_id: int, year: int) -> int:
         """Checks if a team won their conference in a given year.
 
         If the team won their conference, the function returns 1. Otherwise, it returns 0.
@@ -333,9 +368,7 @@ class Data:
         else:
             return 0
 
-
-
-    def checkConferenceTourneyChamp(self,team_id: int, year: int) -> int:
+    def checkConferenceTourneyChamp(self, team_id: int, year: int) -> int:
         """Checks if a team won their conference championship game in a given year.
 
         If the team won their conference championship, the function returns 1. Otherwise it returns 0.
@@ -355,9 +388,7 @@ class Data:
         else:
             return 0
 
-
-
-    def getTourneyAppearances(self,team_id: int) -> int:
+    def getTourneyAppearances(self, team_id: int) -> int:
         """Checks how many times a team has played in the NCAA tournamnet.
 
         Args:
@@ -367,9 +398,7 @@ class Data:
         """
         return len(self.tourney_seeds_pd[self.tourney_seeds_pd['TeamID'] == team_id].index)
 
-
-
-    def handleDifferentCSV(self,df: pd.DataFrame) -> pd.DataFrame:
+    def handleDifferentCSV(self, df: pd.DataFrame) -> pd.DataFrame:
         """Cleans school naming differences between different data sources
 
         The stats CSV is a little different in terms of naming so this is just some data cleaning
@@ -484,8 +513,8 @@ class Data:
         df['School'] = df['School'].replace('Maryland-Eastern Shore', 'MD E Shore')
         return df
 
-
-    def season_totals(self,wstat: str, lstat: str, gamesWon: pd.DataFrame, df: pd.DataFrame, team_id: int) -> Tuple[int,int]:
+    def season_totals(self, wstat: str, lstat: str, gamesWon: pd.DataFrame, df: pd.DataFrame, team_id: int) -> Tuple[
+        int, int]:
         """Adds the total number of a statistic for a team
 
         For a given DataFrame, which is often already filtered by year, this adds up the total of the provided statistic. It
@@ -509,7 +538,7 @@ class Data:
 
         return total, numGames
 
-    def getSeasonData(self,team_id: int, year: int, cleaned_features=False) -> List[float]:
+    def getSeasonData(self, team_id: int, year: int, cleaned_features=False) -> List[float]:
         """Gets the full season data for a given team in a given year
 
         This function looks at a team in a given year and returns a list of statistics which becomes the team's vector for
@@ -526,11 +555,10 @@ class Data:
         """
 
         # The data frame below holds stats for every single game in the given year
-        year_data_pd = self.reg_season_detailed_pd[self.reg_season_detailed_pd['Season'] == year]
+        year_data_pd = self.filtered_regular[self.filtered_regular['Season'] == year]
         # Finding number of points per game
         gamesWon = year_data_pd[year_data_pd.WTeamID == team_id]
         gamesLost = year_data_pd[year_data_pd.LTeamID == team_id]
-
 
         totalPointsScored = self.season_totals('WScore', 'LScore', gamesWon, year_data_pd, team_id)[0]
         numGames = self.season_totals('WScore', 'LScore', gamesWon, year_data_pd, team_id)[1]
@@ -540,44 +568,67 @@ class Data:
 
         # Finding number of fgm in season
         totalFgm = self.season_totals('WFGM', 'LFGM', gamesWon, year_data_pd, team_id)[0]
+        totalOppFGM = self.season_totals('LFGM', 'WFGM', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of fga in season
         totalFga = self.season_totals('WFGA', 'LFGA', gamesWon, year_data_pd, team_id)[0]
+        totalOppFga = self.season_totals('LFGA', 'WFGA', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of fgm3 in season
         totalFgm3 = self.season_totals('WFGM3', 'LFGM3', gamesWon, year_data_pd, team_id)[0]
+        totalOppFgm3 = self.season_totals('LFGM3', 'WFGM3', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of fga3 in season
         totalFga3 = self.season_totals('WFGA3', 'LFGA3', gamesWon, year_data_pd, team_id)[0]
+        totalOppFga3 = self.season_totals('LFGA3', 'WFGA3', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of ftm in season
         totalFtm = self.season_totals('WFTM', 'LFTM', gamesWon, year_data_pd, team_id)[0]
+        totalOppFtm = self.season_totals('LFTM', 'WFTM', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of fta in season
         totalFta = self.season_totals('WFTA', 'LFTA', gamesWon, year_data_pd, team_id)[0]
+        totalOppFta = self.season_totals('LFTA', 'WFTA', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of or in season
         totalOr = self.season_totals('WOR', 'LOR', gamesWon, year_data_pd, team_id)[0]
+        totalOppOr = self.season_totals('LOR', 'WOR', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of dr in season
         totalDr = self.season_totals('WDR', 'LDR', gamesWon, year_data_pd, team_id)[0]
+        totalOppDr = self.season_totals('LDR', 'WDR', gamesWon, year_data_pd, team_id)[0]
 
         totalReb = totalOr + totalDr
+        totalOppReb = totalOppOr + totalOppDr
 
         # Finding number of blk in season
         totalBlk = self.season_totals('WBlk', 'LBlk', gamesWon, year_data_pd, team_id)[0]
+        totalOppBlk = self.season_totals('LBlk', 'WBlk', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of pf in season
         totalPf = self.season_totals('WPF', 'LPF', gamesWon, year_data_pd, team_id)[0]
+        totalOppPf = self.season_totals('LPF', 'WPF', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of to in season
         totalTo = self.season_totals('WTO', 'LTO', gamesWon, year_data_pd, team_id)[0]
+        totalOppTo = self.season_totals('LTO', 'WTO', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of ast in season
         totalAst = self.season_totals('WAst', 'LAst', gamesWon, year_data_pd, team_id)[0]
+        totalOppAst = self.season_totals('LAst', 'WAst', gamesWon, year_data_pd, team_id)[0]
 
         # Finding number of Stl in season
         totalStl = self.season_totals('WStl', 'LStl', gamesWon, year_data_pd, team_id)[0]
+        totalOppStl = self.season_totals('LStl', 'WStl', gamesWon, year_data_pd, team_id)[0]
+
+        totalDrEff = totalDr / (totalOppFga + totalOppFga3 - totalOppFGM - totalOppFgm3)
+        totalOrEff = totalOr / (totalFga + totalFga3 - totalFgm - totalFgm3)
+
+        totalBlkEff = totalBlk / (totalOppFga + totalOppFGM)
+        totalOppBlkEff = totalOppBlk / (totalFga + totalFgm)
+
+        stlPerDr = totalStl / totalDr
+        oppStlPerDr = totalOppStl / totalOppDr
 
         # Finding number of points per game allowed
         totalPointsAllowed = gamesWon['LScore'].sum()
@@ -587,26 +638,29 @@ class Data:
             stats_SOS_pd = stats_SOS_pd.rename(columns={"school_name": "School"})
             stats_SOS_pd = self.handleDifferentCSV(stats_SOS_pd)
             ratings_pd = pd.read_csv(f'files/RatingStats/{self.gender}/RatingStats_{str(year)}.csv')
-            ratings_pd = ratings_pd.rename(columns={"school_name": "School", "Unnamed: 0":"Rk"})
-            ratings_pd["Rk"]=ratings_pd["Rk"]+1
+            ratings_pd = ratings_pd.rename(columns={"school_name": "School", "Unnamed: 0": "Rk"})
+            ratings_pd["Rk"] = ratings_pd["Rk"] + 1
             ratings_pd = self.handleDifferentCSV(ratings_pd)
             name = self.getTeamName(team_id)
             team = stats_SOS_pd[stats_SOS_pd['School'] == name]
             team_rating = ratings_pd[ratings_pd['School'] == name]
-            if (len(team.index) == 0 or len(team_rating.index) == 0): #Can't find the team
+            if (len(team.index) == 0 or len(team_rating.index) == 0):  # Can't find the team
                 sos = 0
                 srs = 0
             else:
                 sos = team['sos'].values[0]
                 srs = team['srs'].values[0]
-            tournamentSeed = math.floor(ratings_pd[ratings_pd["School"] ==  name]["Rk"]/4)
+            tournamentSeed = math.floor(ratings_pd[ratings_pd["School"] == name]["Rk"] / 4)
         except:
             # logging.info(f"There is no MM file for {year}")
             sos = 0
             srs = 0
             tournamentSeed = 91
 
-
+        try:
+            ord_rank =         list(self.ordinals[(self.ordinals['Season'] == year) & (self.ordinals['TeamID'] == team_id)]['OrdinalRank'])[-1]
+        except:
+            ord_rank = 375
         # Finding tournament seed for that year
         tourneyYear = self.tourney_seeds_pd[self.tourney_seeds_pd['Season'] == year]
         seed = tourneyYear[tourneyYear['TeamID'] == team_id]
@@ -628,19 +682,41 @@ class Data:
             avgAssists = 0
             avgRebounds = 0
             avgSteals = 0
+            avgPoss = 0
+            totalPointsPerPoss = 0
+            totalOppPointsPerPoss = 0
             totalfgmPerPoss = 0
+            totalOppFgmPerPoss = 0
             totalfgaPerPoss = 0
+            totalOppFgaPerPoss = 0
             totalfgm3PerPoss = 0
+            totalOppFgm3PerPoss = 0
             totalfga3PerPoss = 0
+            totalOppFga3PerPoss = 0
             totalftmPerPoss = 0
+            totalOppFtmPerPoss = 0
             totalftaPerPoss = 0
+            totalOppFtaPerPoss = 0
             totalorPerPoss = 0
+            totalOppOrPerPoss = 0
             totaldrPerPoss = 0
+            totalOppDrPerPoss = 0
             totalastPerPoss = 0
+            totalOppAstPerPoss = 0
             totaltoPerPoss = 0
+            totalOppToPerPoss = 0
             totalstlPerPoss = 0
+            totalOppStlPerPoss = 0
             totalblkPerPoss = 0
+            totalOppBlkPerPoss = 0
             totalpfPerPoss = 0
+            totalOppPfPerPoss = 0
+            totalDrEff = 0
+            totalOrEff = 0
+            totalBlkEff = 0
+            totalOppBlkEff = 0
+            stlPerDr = 0
+            oppStlPerDr = 0
         else:
             avgPointsScored = totalPointsScored / numGames
             avgPointsAllowed = totalPointsAllowed / numGames
@@ -649,53 +725,76 @@ class Data:
             avgAssists = totalAst / numGames
             avgRebounds = totalReb / numGames
             avgSteals = totalStl / numGames
+            avgPoss = totalPoss / numGames
+            totalPointsPerPoss = totalPointsScored / totalPoss
+            totalOppPointsPerPoss = totalPointsAllowed / totalPoss
             totalfgmPerPoss = totalFgm / totalPoss
+            totalOppFgmPerPoss = totalOppFGM / totalPoss
             totalfgaPerPoss = totalFga / totalPoss
+            totalOppFgaPerPoss = totalOppFga / totalPoss
             totalfgm3PerPoss = totalFgm3 / totalPoss
+            totalOppFgm3PerPoss = totalOppFgm3 / totalPoss
             totalfga3PerPoss = totalFga3 / totalPoss
+            totalOppFga3PerPoss = totalOppFga3 / totalPoss
             totalftmPerPoss = totalFtm / totalPoss
+            totalOppFtmPerPoss = totalOppFtm / totalPoss
             totalftaPerPoss = totalFta / totalPoss
+            totalOppFtaPerPoss = totalOppFta / totalPoss
             totalorPerPoss = totalOr / totalPoss
+            totalOppOrPerPoss = totalOppOr / totalPoss
             totaldrPerPoss = totalDr / totalPoss
+            totalOppDrPerPoss = totalOppDr / totalPoss
             totalastPerPoss = totalAst / totalPoss
+            totalOppAstPerPoss = totalOppAst / totalPoss
             totaltoPerPoss = totalTo / totalPoss
+            totalOppToPerPoss = totalOppTo / totalPoss
             totalstlPerPoss = totalStl / totalPoss
+            totalOppStlPerPoss = totalOppStl / totalPoss
             totalblkPerPoss = totalBlk / totalPoss
+            totalOppBlkPerPoss = totalOppBlk / totalPoss
             totalpfPerPoss = totalPf / totalPoss
-        full_feature_pool = [numWins, totalPointsScored, avgPointsScored, totalPointsAllowed, avgPointsAllowed, totalFgm3,
+            totalOppPfPerPoss = totalOppPf / totalPoss
+
+        full_feature_pool = [numWins, totalPointsScored, avgPointsScored, totalPointsAllowed, avgPointsAllowed,
+                             totalFgm3,
                              avg3sMade, totalTo, avgTurnovers, totalAst, avgAssists, totalReb, avgRebounds, totalStl,
-                             avgSteals, totalFgm, totalfgmPerPoss, totalFga, totalfgaPerPoss, totalFgm3, totalfgm3PerPoss,
+                             avgSteals, totalFgm, totalfgmPerPoss, totalFga, totalfgaPerPoss, totalFgm3,
+                             totalfgm3PerPoss,
                              totalFga3, totalfga3PerPoss, totalFtm, totalftmPerPoss, totalFta, totalftaPerPoss, totalOr,
                              totalorPerPoss, totalDr, totaldrPerPoss, totalastPerPoss, totaltoPerPoss, totalstlPerPoss,
                              totalBlk, totalblkPerPoss, totalPf, totalpfPerPoss, self.checkPower6Conference(team_id),
                              tournamentSeed, self.getTourneyAppearances(team_id), sos, srs]
         # full_feature_pool is trimmed to only include per possession stats
-        full_feature_pool = [numWins, totalfgmPerPoss, totalfgaPerPoss, totalfgm3PerPoss, totalfga3PerPoss, totalftmPerPoss,
-                             totalftaPerPoss, totalorPerPoss, totaldrPerPoss, totalastPerPoss, totaltoPerPoss,
-                             totalstlPerPoss, totalblkPerPoss, totalpfPerPoss, self.checkPower6Conference(team_id),
-                             tournamentSeed, self.getTourneyAppearances(team_id), sos, srs]
-        # Removed tournament seeding
-        full_feature_pool = [numWins, totalfgmPerPoss, totalfgaPerPoss, totalfgm3PerPoss, totalfga3PerPoss,
-                             totalftmPerPoss,
-                             totalftaPerPoss, totalorPerPoss, totaldrPerPoss, totalastPerPoss, totaltoPerPoss,
-                             totalstlPerPoss, totalblkPerPoss, totalpfPerPoss, self.checkPower6Conference(team_id),
+        full_feature_pool = [numWins, avgPoss, totalPointsPerPoss, totalOppPointsPerPoss, totalfgmPerPoss,
+                             totalOppFgmPerPoss, totalfgaPerPoss, totalOppFgaPerPoss, totalfgm3PerPoss,
+                             totalOppFgm3PerPoss, totalfga3PerPoss, totalOppFga3PerPoss, totalftmPerPoss,
+                             totalOppFtmPerPoss, totalftaPerPoss, totalOppFtaPerPoss, totalorPerPoss, totalOppOrPerPoss,
+                             totaldrPerPoss, totalOppDrPerPoss, totalastPerPoss, totalOppAstPerPoss, totaltoPerPoss,
+                             totalOppToPerPoss, totalstlPerPoss, totalOppStlPerPoss, totalblkPerPoss,
+                             totalOppBlkPerPoss,
+                             totalpfPerPoss, totalOppPfPerPoss, totalDrEff, totalOrEff, totalBlkEff, totalOppBlkEff,
+                             stlPerDr, oppStlPerDr, self.checkPower6Conference(team_id), tournamentSeed, ord_rank,
                              self.getTourneyAppearances(team_id), sos, srs]
+        # Removed tournament seeding
+        # full_feature_pool = [numWins, totalfgmPerPoss, totalfgaPerPoss, totalfgm3PerPoss, totalfga3PerPoss,
+        #                      totalftmPerPoss,
+        #                      totalftaPerPoss, totalorPerPoss, totaldrPerPoss, totalastPerPoss, totaltoPerPoss,
+        #                      totalstlPerPoss, totalblkPerPoss, totalpfPerPoss, self.checkPower6Conference(team_id),
+        #                      self.getTourneyAppearances(team_id), sos, srs]
 
         if cleaned_features == True:
             # This is after RFE on training data normalized with the mean
             features = [numWins, totalPointsScored, avgPointsScored, totalPointsAllowed, avgPointsAllowed, totalAst,
                         totalReb, totalFgm, totalfgmPerPoss, totalFtm, totalDr, totaldrPerPoss,
-                        self.checkPower6Conference(team_id), tournamentSeed, self.getTourneyAppearances(team_id), sos, srs]
+                        self.checkPower6Conference(team_id), tournamentSeed, self.getTourneyAppearances(team_id), sos,
+                        srs]
         else:
             features = full_feature_pool
-
 
         float_features = [float(x) for x in features]
         return float_features
 
-
-
-    #TODO this will need to be for 2023
+    # TODO this will need to be for 2023
     # def get2022Data(self,team_id: int, cleaned_features=True) -> List[float]:
     #     """Gets the full season data for a given team in 2022
     #
@@ -770,10 +869,7 @@ class Data:
     #     return float_features
     #
 
-
-
-
-    def compareTwoTeams(self,id_1: int, id_2: int, year: int) -> List[float]:
+    def compareTwoTeams(self, id_1: int, id_2: int, year: int) -> List[float]:
         """Compares two teams in a given year and gives a combined vector for the matchup
 
         This function looks at two teams in a given year. It subtracts one team's vector from the other to create a matchup
@@ -791,8 +887,7 @@ class Data:
         diff = [a - b for a, b in zip(team_1, team_2)]
         return diff
 
-
-    def createSeasonDict(self,year: int) -> Dict[int,List[float]]:
+    def createSeasonDict(self, year: int) -> Dict[int, List[float]]:
         """Creates a dictionary of team vectors for all teams in a given year.
 
         This function looks at all teams in a given year and calculates their team vector. It then creates a dictionary
@@ -811,9 +906,7 @@ class Data:
             seasonDictionary[team_id] = team_vector
         return seasonDictionary
 
-
-
-    def getHomeStat(self,row: pd.Series) -> int:
+    def getHomeStat(self, row: pd.Series) -> int:
         """Calculates if a team was at home, away, or at a neutral site.
 
         This function looks at a matchup and if the team was the home team returns 1, if away it returns -1. If neutral it
@@ -833,9 +926,14 @@ class Data:
             home = 0
         return home
 
+    def get_season_for_tourney_teams(self, season, tourney):
+        teams = list(tourney['WTeamID'])
+        teams.extend(list(tourney['LTeamID']))
+        teams = list(set(teams))
+        season_trimmed = season[(season['WTeamID'].isin(teams)) & (season['LTeamID'].isin(teams))]
+        return season_trimmed
 
-
-    def createTrainingSet(self,years: range) -> Tuple[np.array,np.array]:
+    def createTrainingSet(self, years: range) -> Tuple[np.array, np.array]:
         """Creates a training set and a training target set
 
         This function iterates through a range of years and creates a training set of matchup vectors as well as a target
@@ -848,24 +946,28 @@ class Data:
         """
 
         totalNumGames = 0
-        #loop through years
+        # loop through years
         for year in years:
-            season = self.reg_season_compact_pd[self.reg_season_compact_pd['Season'] == year]
-            totalNumGames += len(season.index)
+            season = self.filtered_regular[self.filtered_regular['Season'] == year]
             tourney = self.tourney_compact_pd[self.tourney_compact_pd['Season'] == year]
+            # season_trimmed = self.get_season_for_tourney_teams(season, tourney)
+
+            totalNumGames += len(season.index)
             totalNumGames += len(tourney.index)
-        numFeatures = len(self.getSeasonData(1181,2012)) #Just choosing a random team and seeing the dimensionality of the vector
-        x_Train = np.zeros(( totalNumGames, numFeatures + 1))
-        y_Train = np.zeros( totalNumGames )
+        numFeatures = len(
+            self.getSeasonData(1181, 2012))  # Just choosing a random team and seeing the dimensionality of the vector
+        x_Train = np.zeros((totalNumGames, numFeatures + 1))
+        y_Train = np.zeros(totalNumGames)
         indexCounter = 0
         for year in years:
             team_vectors = self.createSeasonDict(year)
-            season = self.reg_season_compact_pd[self.reg_season_compact_pd['Season'] == year]
-            numGamesInSeason = len(season.index)
+            season = self.filtered_regular[self.filtered_regular['Season'] == year]
             tourney = self.tourney_compact_pd[self.tourney_compact_pd['Season'] == year]
+            # season_trimmed = self.get_season_for_tourney_teams(season, tourney)
+            numGamesInSeason = len(season.index)
             numGamesInSeason += len(tourney.index)
-            xTrainSeason = np.zeros(( numGamesInSeason, numFeatures + 1))
-            yTrainSeason = np.zeros(( numGamesInSeason ))
+            xTrainSeason = np.zeros((numGamesInSeason, numFeatures + 1))
+            yTrainSeason = np.zeros((numGamesInSeason))
             counter = 0
             for index, row in season.iterrows():
                 w_team = row['WTeamID']
@@ -880,7 +982,7 @@ class Data:
                     yTrainSeason[counter] = 1
                 else:
                     diff.append(-home)
-                    xTrainSeason[counter] = [ -p for p in diff]
+                    xTrainSeason[counter] = [-p for p in diff]
                     yTrainSeason[counter] = 0
                 counter += 1
             for index, row in tourney.iterrows():
@@ -889,24 +991,23 @@ class Data:
                 l_team = row['LTeamID']
                 l_vector = team_vectors[l_team]
                 diff = [a - b for a, b in zip(w_vector, l_vector)]
-                home = 0 #All tournament games are neutral
+                home = 0  # All tournament games are neutral
                 if (counter % 2 == 0):
                     diff.append(home)
                     xTrainSeason[counter] = diff
                     yTrainSeason[counter] = 1
                 else:
                     diff.append(-home)
-                    xTrainSeason[counter] = [ -p for p in diff]
+                    xTrainSeason[counter] = [-p for p in diff]
                     yTrainSeason[counter] = 0
                 counter += 1
-            x_Train[indexCounter:numGamesInSeason+indexCounter] = xTrainSeason
-            y_Train[indexCounter:numGamesInSeason+indexCounter] = yTrainSeason
+            x_Train[indexCounter:numGamesInSeason + indexCounter] = xTrainSeason
+            y_Train[indexCounter:numGamesInSeason + indexCounter] = yTrainSeason
             indexCounter += numGamesInSeason
         return x_Train, y_Train
 
-
-    #TODO normalize inputs
-    def normalizeInput(self,arr: List[float]) -> List[float]:
+    # TODO normalize inputs
+    def normalizeInput(self, arr: List[float]) -> List[float]:
         """Normalizes values in a vector
 
         This function scales the values in the vectors between the max and the min values in the data.
@@ -920,12 +1021,13 @@ class Data:
         self.training_min = np.min(self.xTrain, axis=0)
         self.training_max = np.max(self.xTrain, axis=0)
         for j in range(arr.shape[1]):
-            minVal = min(arr[:,j])
-            maxVal = max(arr[:,j])
-            arr_new[:,j] =  (arr_new[:,j] - minVal) / (maxVal - minVal)
+            minVal = min(arr[:, j])
+            maxVal = max(arr[:, j])
+            arr_new[:, j] = (arr_new[:, j] - minVal) / (maxVal - minVal)
         return arr_new
+
     # alternative:
-    def normalize(self,X: List[float]) -> List[float]:
+    def normalize(self, X: List[float]) -> List[float]:
         """Normalizes values in a vector
 
         This function standardizes a feature vector by setting the mean to 0 and the standard deviation to 1. This is the
@@ -939,14 +1041,11 @@ class Data:
         global training_mean
         global training_std
         x_new = X
-        training_mean = np.mean(X, axis = 0)
-        training_std = np.std(X, axis = 0)
-        return (x_new - np.mean(x_new, axis = 0)) / np.std(x_new, axis = 0)
+        training_mean = np.mean(X, axis=0)
+        training_std = np.std(X, axis=0)
+        return (x_new - np.mean(x_new, axis=0)) / np.std(x_new, axis=0)
 
-
-
-
-    def showDependency(self,predictions, test, stat, my_categories):
+    def showDependency(self, predictions, test, stat, my_categories):
         """Plots the actual values vs predictions for a given stat
 
         Args:
@@ -958,15 +1057,13 @@ class Data:
             None
         """
 
-        difference = test[:,my_categories.index(stat)]
+        difference = test[:, my_categories.index(stat)]
         plt.scatter(difference, predictions)
         plt.ylabel('Probability of Team 1 Win')
         plt.xlabel(stat + ' Difference (Team 1 - Team 2)')
         plt.show()
 
-
-
-    def showFeatureImportance(self,my_categories):
+    def showFeatureImportance(self, my_categories):
         """Plots feature importance from model
 
         Args:
@@ -980,7 +1077,7 @@ class Data:
         fx_imp.sort_values(ascending=True)
         fx_imp.plot(kind='barh')
 
-    def predictGame(self,team_1_vector: List[float], team_2_vector: List[float], home: int) -> float:
+    def predictGame(self, team_1_vector: List[float], team_2_vector: List[float], home: int) -> float:
         """Runs a matchup vector through the trained model and outputs a probability that the first team wins
 
         Args:
@@ -996,10 +1093,11 @@ class Data:
         diff = pd.DataFrame(diff).T
         if self.rfecv is not None:
             diff = diff[self.rfecv.get_support(indices=True)]
-            diff = (diff-self.training_min[self.rfecv.get_support(indices=True)])/(self.training_max[self.rfecv.get_support(indices=True)]-self.training_min[self.rfecv.get_support(indices=True)])
+            diff = (diff - self.training_min[self.rfecv.get_support(indices=True)]) / (
+                        self.training_max[self.rfecv.get_support(indices=True)] - self.training_min[
+                    self.rfecv.get_support(indices=True)])
         else:
-           diff = (diff-self.training_min)/(self.training_max-self.training_min)
-
+            diff = (diff - self.training_min) / (self.training_max - self.training_min)
 
         probability_team_1 = (self.clsf.model.predict_proba([diff.loc[0]])[0][1])
 
@@ -1014,18 +1112,18 @@ class Data:
         if self.rfecv is not None:
             diff_rev = diff_rev[self.rfecv.get_support(indices=True)]
             diff_rev = (diff_rev - self.training_min[self.rfecv.get_support(indices=True)]) / (
-                        self.training_max[self.rfecv.get_support(indices=True)] - self.training_min[
-                    self.rfecv.get_support(indices=True)])
+                    self.training_max[self.rfecv.get_support(indices=True)] - self.training_min[
+                self.rfecv.get_support(indices=True)])
         else:
             diff_rev = (diff_rev - self.training_min) / (self.training_max - self.training_min)
 
         probability_team_2 = (self.clsf.model.predict_proba([diff_rev.loc[0]])[0][1])
         avg_prob = (probability_team_1 + 1 - probability_team_2) / 2
         return avg_prob
-        #return model.predict_proba([diff])
+        # return model.predict_proba([diff])
 
-    #TODO experiment with the range of years which leads to the best results
-    def get_x_and_y(self,load_model: bool, start_year: int, end_year: int) -> Tuple[np.array,np.array]:
+    # TODO experiment with the range of years which leads to the best results
+    def get_x_and_y(self, load_model: bool, start_year: int, end_year: int) -> Tuple[np.array, np.array]:
         """Creates training data from all data between two years.
 
         Args:
@@ -1036,18 +1134,19 @@ class Data:
             Tuple[np.array,np.array]
         """
         if load_model == False:
-            years_to_train = range(start_year,end_year)
+            years_to_train = range(start_year, end_year)
             logging.info("Creating training set")
             self.xTrain, self.yTrain = self.createTrainingSet(years_to_train)
             logging.info("Training set created")
-            np.save(f'{self.gender}xTrain', self.xTrain)
-            np.save(f'{self.gender}yTrain', self.yTrain)
+            np.save(f'{self.gender}xTrain_3', self.xTrain)
+            np.save(f'{self.gender}yTrain_3', self.yTrain)
         else:
             self.xTrain = np.load(f'{self.gender}xTrain.npy')
             self.yTrain = np.load(f'{self.gender}yTrain.npy')
         return self.xTrain, self.yTrain
 
-    def build_model(self, gender: str, prebuilt_data: bool,first_year: int,last_year: int, gridsearch_flag: bool, rfecv_flag: bool,
+    def build_model(self, gender: str, prebuilt_data: bool, first_year: int, last_year: int, gridsearch_flag: str,
+                    rfecv_flag: bool,
                     analyze_flag: bool) -> classifier.Classifier:
         """
         Full program. Reads data, builds Random Forests model.
@@ -1064,49 +1163,53 @@ class Data:
         self.gender = gender
         self.read_data(gender)
 
-        #create lists of teams in major conferences
-        self.listACCteams = ['North Carolina','Virginia','Florida St','Louisville','Notre Dame','Syracuse','Duke','Virginia Tech','Georgia Tech','Miami','Wake Forest','Clemson','NC State','Boston College','Pittsburgh']
-        self.listPac12teams = ['Arizona','Oregon','UCLA','California','USC','Utah','Washington St','Stanford','Arizona St','Colorado','Washington','Oregon St']
-        self.listSECteams = ['Kentucky','South Carolina','Florida','Arkansas','Alabama','Tennessee','Mississippi St','Georgia','Ole Miss','Vanderbilt','Auburn','Texas A&M','LSU','Missouri']
-        self.listBig10teams = ['Maryland','Wisconsin','Purdue','Northwestern','Michigan St','Indiana','Iowa','Michigan','Penn St','Nebraska','Minnesota','Illinois','Ohio St','Rutgers']
-        self.listBig12teams = ['Kansas','Baylor','West Virginia','Iowa St','TCU','Kansas St','Texas Tech','Oklahoma St','Texas','Oklahoma']
-        self.listBigEastteams = ['Butler','Creighton','DePaul','Georgetown','Marquette','Providence','Seton Hall','St John\'s','Villanova','Xavier']
-
+        # create lists of teams in major conferences
+        self.listACCteams = ['North Carolina', 'Virginia', 'Florida St', 'Louisville', 'Notre Dame', 'Syracuse', 'Duke',
+                             'Virginia Tech', 'Georgia Tech', 'Miami', 'Wake Forest', 'Clemson', 'NC State',
+                             'Boston College', 'Pittsburgh']
+        self.listPac12teams = ['Arizona', 'Oregon', 'UCLA', 'California', 'USC', 'Utah', 'Washington St', 'Stanford',
+                               'Arizona St', 'Colorado', 'Washington', 'Oregon St']
+        self.listSECteams = ['Kentucky', 'South Carolina', 'Florida', 'Arkansas', 'Alabama', 'Tennessee',
+                             'Mississippi St', 'Georgia', 'Ole Miss', 'Vanderbilt', 'Auburn', 'Texas A&M', 'LSU',
+                             'Missouri']
+        self.listBig10teams = ['Maryland', 'Wisconsin', 'Purdue', 'Northwestern', 'Michigan St', 'Indiana', 'Iowa',
+                               'Michigan', 'Penn St', 'Nebraska', 'Minnesota', 'Illinois', 'Ohio St', 'Rutgers']
+        self.listBig12teams = ['Kansas', 'Baylor', 'West Virginia', 'Iowa St', 'TCU', 'Kansas St', 'Texas Tech',
+                               'Oklahoma St', 'Texas', 'Oklahoma']
+        self.listBigEastteams = ['Butler', 'Creighton', 'DePaul', 'Georgetown', 'Marquette', 'Providence', 'Seton Hall',
+                                 'St John\'s', 'Villanova', 'Xavier']
 
         # TODO this is unused
         # getListForURL(teamList)
 
-        if gender=="men":
-            #test the functions to this point
-            print("The vector for teamID 1103 in 2022 is ",self.getSeasonData(1103,2022))
-
-            #get kentucky vector from 2021
-            kentucky_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kentucky'].values[0][0]
-            print("The vector for Kentucky in 2021 is ",self.getSeasonData(kentucky_id, 2021))
-
-
-
-
-            #test comparison of two teams in 2022
-            kansas_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kansas'].values[0][0]
-            print("The vector for teamIDs 1234 and 1242 in 2022 is ",self.compareTwoTeams(1234, 1242, 2022))
-        else:
+        if gender == "men":
             # test the functions to this point
-            print("The vector for teamID 3103 in 2023 is ", self.getSeasonData(3103, 2023))
+            print("The vector for teamID 1103 in 2022 is ", self.getSeasonData(1103, 2022))
 
             # get kentucky vector from 2021
             kentucky_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kentucky'].values[0][0]
-            print("The vector for Kentucky in 2023 is ", self.getSeasonData(kentucky_id, 2023))
+            print("The vector for Kentucky in 2021 is ", self.getSeasonData(kentucky_id, 2021))
+
+            # test comparison of two teams in 2024
+            kansas_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kansas'].values[0][0]
+            print("The vector for teamIDs 1234 and 1242 in 2024 is ", self.compareTwoTeams(1234, 1242, 2023))
+        else:
+            # test the functions to this point
+            print("The vector for teamID 3103 in 2024 is ", self.getSeasonData(3103, 2024))
+
+            # get kentucky vector from 2021
+            kentucky_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kentucky'].values[0][0]
+            print("The vector for Kentucky in 2021 is ", self.getSeasonData(kentucky_id, 2021))
 
             # test comparison of two teams in 2022
             kansas_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kansas'].values[0][0]
-            print("The vector for teamIDs 3234 and 3242 in 2023 is ", self.compareTwoTeams(3234, 3242, 2023))
+            print("The vector for teamIDs 3234 and 3242 in 2024 is ", self.compareTwoTeams(3234, 3242, 2024))
 
-        training_data = self.get_x_and_y(prebuilt_data,first_year,last_year)
+        training_data = self.get_x_and_y(prebuilt_data, first_year, last_year)
         self.xTrain = training_data[0]
         self.yTrain = training_data[1]
         self.xTrainNorm = self.normalizeInput(self.xTrain)
-        print("xTrain shape: ",self.xTrain.shape,"\nyTrain shape: ",self.yTrain.shape)
+        print("xTrain shape: ", self.xTrain.shape, "\nyTrain shape: ", self.yTrain.shape)
 
         # These are the different models I tried. Simply uncomment the model that you want to try.
         # TODO utilize cross validation
@@ -1123,7 +1226,8 @@ class Data:
         # model = AdaBoostClassifier(n_estimators=100)
         # model = GradientBoostingClassifier(n_estimators=100)
         # model = [GradientBoostingRegressor(n_estimators=100, max_depth=5)]
-        model = RandomForestClassifier(n_jobs=-1,bootstrap=False, max_depth=None, max_features='auto', min_samples_leaf=20,
+        model = RandomForestClassifier(n_jobs=-1, bootstrap=False, max_depth=None, max_features='auto',
+                                       min_samples_leaf=20,
                                        min_samples_split=9, n_estimators=150)
         # model = KNeighborsClassifier(n_neighbors=39)
         # neuralNetwork(10)
@@ -1131,20 +1235,23 @@ class Data:
         # model = LinearSVC(penalty='l2', loss='squared_hinge', dual=True, tol=0.0001, C=0.1)
         # model = GradientBoostingRegressor(n_estimators=100, max_depth=5)
         # model = linear_model.Ridge(alpha = 0.5)
-        model = xgb.XGBClassifier(verbosity=1,n_jobs=-1)
+        model = xgb.XGBClassifier(verbosity=1, n_jobs=-1)
         # TODO utilize the categories or delete them
 
-        self.clsf = classifier.Classifier(model,self.xTrainNorm,self.yTrain,["numWins", "totalPointsScored", "avgPointsScored",
-                                                          "totalPointsAllowed", "avgPointsAllowed", "totalFgm3", "avg3sMade",
-                                                          "totalTo", "avgTurnovers", "totalAst", "avgAssists", "totalReb",
-                                                          "avgRebounds", "totalStl", "avgSteals", "totalFgm", "totalfgmPerPoss",
-                                                          "totalFga", "totalfgaPerPoss", "totalFgm3", "totalfgm3PerPoss",
-                                                          "totalFga3", "totalfga3PerPoss", "totalFtm", "totalftmPerPoss",
-                                                          "totalFta", "totalftaPerPoss", "totalOr", "totalorPerPoss", "totalDr",
-                                                          "totaldrPerPoss", "totalastPerPoss", "totaltoPerPoss",
-                                                          "totalstlPerPoss", "totalBlk", "totalblkPerPoss", "totalPf",
-                                                          "totalpfPerPoss", "checkPower6Conference(team_id)", "tournamentSeed",
-                                                          "getTourneyAppearances(team_id)", "sos", "srs","location"])
+        self.clsf = classifier.Classifier(model, self.xTrainNorm, self.yTrain,
+                                          ['numWins', 'avgPoss', 'totalPointsPerPoss', 'totalOppPointsPerPoss', 'totalfgmPerPoss',
+                                           'totalOppFgmPerPoss', 'totalfgaPerPoss', 'totalOppFgaPerPoss', 'totalfgm3PerPoss',
+                                           'totalOppFgm3PerPoss', 'totalfga3PerPoss', 'totalOppFga3PerPoss', 'totalftmPerPoss',
+                                           'totalOppFtmPerPoss', 'totalftaPerPoss', 'totalOppFtaPerPoss', 'totalorPerPoss',
+                                           'totalOppOrPerPoss',
+                                           'totaldrPerPoss', 'totalOppDrPerPoss', 'totalastPerPoss', 'totalOppAstPerPoss',
+                                           'totaltoPerPoss',
+                                           'totalOppToPerPoss', 'totalstlPerPoss', 'totalOppStlPerPoss', 'totalblkPerPoss',
+                                           'totalOppBlkPerPoss',
+                                           'totalpfPerPoss', 'totalOppPfPerPoss', 'totalDrEff', 'totalOrEff', 'totalBlkEff',
+                                           'totalOppBlkEff',
+                                           'stlPerDr', 'oppStlPerDr', 'checkPower6Conference', 'tournamentSeed',
+                                           'ord_rank', 'tourney_appearancs', 'sos', 'srs'])
 
         # paramgrid = {'bootstrap': [True, False],
         #              'max_depth': [10, None],
@@ -1152,111 +1259,104 @@ class Data:
         #              'min_samples_leaf': [10, 20],
         #              'min_samples_split': [5, 9],
         #              'n_estimators': [50, 150]}
-        if gridsearch_flag == True:
-            self.clsf.gridSearch(paramgrid = {'eta': [.3,.5,.7],
-                     'max_depth': [3, 6],
-                     'subsample': [.5,1]})
+        if gridsearch_flag == 'grid':
+            self.clsf.gridSearch(paramgrid={'eta': [.3, .5, .7],
+                                            'max_depth': [3, 6],
+                                            'subsample': [.5, 1]})
+        if gridsearch_flag == 'bayes':
+            self.clsf.bayesian_opt()
+            self.clsf.model['max_depth'] = int(self.clsf.model['max_depth'])
+
         if rfecv_flag == True:
             self.rfecv = self.clsf.RFECVSelect()
 
         if analyze_flag == True:
             accuracy = self.clsf.analyze_model()
 
-        self.clsf.model.fit(self.clsf.xTrain,self.clsf.yTrain)
-
-
+        self.clsf.model.fit(self.clsf.xTrain, self.clsf.yTrain)
 
         # This can be used to predict 2022 games
         team1_name = "Creighton"
         team2_name = "San Diego St"
-        team1_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team1_name].values[0][0],2023)
-        team2_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team2_name].values[0][0],2023)
+        team1_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team1_name].values[0][0], 2023)
+        team2_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team2_name].values[0][0], 2023)
 
-        print ('Probability that ' + team1_name + ' wins:', self.predictGame(team1_vector, team2_vector, 0))
+        print('Probability that ' + team1_name + ' wins:', self.predictGame(team1_vector, team2_vector, 0))
         try:
-            print(rfecv.cv_results_['mean_test_score'].mean())
-            print(rfecv.cv_results_['std_test_score'].mean())
+            print(self.rfecv.cv_results_['mean_test_score'].mean())
+            print(self.rfecv.cv_results_['std_test_score'].mean())
         except:
             logging.error("Tried to reference rfecv with flag set to False")
 
         # pickle.dump(self, open("2023_march_madness.pickle", 'wb'),protocol=pickle.HIGHEST_PROTOCOL)
-        with open(f'{self.gender}_noseed_xgb_2023_march_madness.dill', 'wb') as file:
+        with open(f'{self.gender}_noseed_xgb_2023_march_madness_3.dill', 'wb') as file:
             pickle.dump(self, file)
         return self.clsf
 
+    def submission(self, file_out="files/2023MarchMadnessKaggleLMR.csv") -> None:
+        submission = pd.read_csv("files/SampleSubmission2024.csv")
+        submission
+        logging.info("Creating submission csv")
+        preds = []
+        for i in range(130683):
+            if submission.iloc[i][0][5] == "1":
+                vector1 = self.getSeasonData(int(submission.iloc[i][0][5:9]), 2024)
+                vector2 = self.getSeasonData(int(submission.iloc[i][0][10:14]), 2024)
+                pred = self.predictGame(vector1, vector2, 0)
+                preds.append(pred)
+        submission["Pred"] = preds
+        #
+        #
+        #
+        submission.tail()
 
-
-
-
-    def submission(self,file_out="files/2023MarchMadnessKaggleLMR.csv") -> None:
-            submission=pd.read_csv("files/SampleSubmission2023.csv")
-            submission
-            logging.info("Creating submission csv")
-            preds=[]
-            for i in range(130683):
-                if submission.iloc[i][0][5] == "1":
-                    vector1=self.getSeasonData(int(submission.iloc[i][0][5:9]),2023)
-                    vector2=self.getSeasonData(int(submission.iloc[i][0][10:14]),2023)
-                    pred=self.predictGame(vector1, vector2, 0)
-                    preds.append(pred)
-            submission["Pred"]=preds
-            #
-            #
-            #
-            submission.tail()
-
-
-            submission.to_csv(file_out)
-            logging.info("Submission csv created successfully")
-
+        submission.to_csv(file_out)
+        logging.info("Submission csv created successfully")
 
 
 if __name__ == "__main__":
-    men_data_obj = Data()
-    women_data_obj = Data()
-    men_classifier = men_data_obj.build_model("men",True,2003,2023,True,True,True)
-    women_classifier = women_data_obj.build_model("women",True,2010,2023,True,True,True)
-    season_dict = createSeasonDict()
-    createSubmission(men_data_obj,women_data_obj)
+
+    def load_model():
+        try:
+            file = open("combined_2023_march_madness.dill", "rb")
+            run = dill.load(file)
+            file.close()
+            return run
+        except:
+            logging.error("No saved model. Building model.")
+            return
 
 
-def load_model():
-    try:
-        file = open("combined_2023_march_madness.dill", "rb")
-        run = dill.load(file)
-        file.close()
-        return run
-    except:
-        logging.error("No saved model. Building model.")
-        return
-def createSeasonDict():
-    season_dict = {}
-    for i in range(len(men_data_obj.teams_pd)):
-        id = men_data_obj.teams_pd["TeamID"][i]
-        season_dict[id] = men_data_obj.getSeasonData(id, 2023)
-        print(i)
+    def createSeasonDict():
+        season_dict = {}
+        for i in range(len(men_data_obj.teams_pd)):
+            id = men_data_obj.teams_pd["TeamID"][i]
+            season_dict[id] = men_data_obj.getSeasonData(id, 2023)
+            print(i)
 
-    for i in range(len(women_data_obj.teams_pd)):
-        id = women_data_obj.teams_pd["TeamID"][i]
-        season_dict[id] = women_data_obj.getSeasonData(id, 2023)
-        print(i)
-    return season_dict
+        for i in range(len(women_data_obj.teams_pd)):
+            id = women_data_obj.teams_pd["TeamID"][i]
+            season_dict[id] = women_data_obj.getSeasonData(id, 2023)
+            print(i)
+        return season_dict
 
 
-def submission1(string):
-    vector1 = season_dict[int(string[5:9])]
-    vector2 = season_dict[int(string[10:14])]
-    prediction = men_data_obj.predictGame(vector1, vector2, 0)
-    return prediction
+    def submission1(string):
+        vector1 = season_dict[int(string[5:9])]
+        vector2 = season_dict[int(string[10:14])]
+        prediction = men_data_obj.predictGame(vector1, vector2, 0)
+        return prediction
 
 
-def submission2(string):
-    vector1 = season_dict[int(string[5:9])]
-    vector2 = season_dict[int(string[10:14])]
-    prediction = women_data_obj.predictGame(vector1, vector2, 0)
-    return prediction
-def createSubmission(mens_model, womens_model,file_out="files/2023NoSeedMarchMadnessKaggleLMR.csv") -> None:
-        submission=pd.read_csv("files/SampleSubmission2023.csv")
+    def submission2(string):
+        vector1 = season_dict[int(string[5:9])]
+        vector2 = season_dict[int(string[10:14])]
+        prediction = women_data_obj.predictGame(vector1, vector2, 0)
+        return prediction
+
+
+    def createSubmission(mens_model, womens_model, file_out="files/2023NoSeedMarchMadnessKaggleLMR.csv") -> None:
+        submission = pd.read_csv("files/SampleSubmission2023.csv")
         sub_men = submission[:65703]
         sub_women = submission[65703:]
         logging.info("Creating submission csv")
@@ -1269,12 +1369,18 @@ def createSubmission(mens_model, womens_model,file_out="files/2023NoSeedMarchMad
         submission = submission.copy().rename(columns={"pred": "Pred"})
         submission.to_csv("files/2023NoSeedMarchMadnessKaggleLMR.csv", index=False)
 
-
-
         submission.to_csv(file_out)
         logging.info("Submission csv created successfully")
 
-def xgBoost():
-    import xgboost as xgb
-    xgb_model = xgb.XGBClassifier(verbosity=2)
-    xgb_model.fit(X_train, y_train)
+
+    # def xgBoost():
+    #     import xgboost as xgb
+    #     xgb_model = xgb.XGBClassifier(verbosity=2)
+    #     xgb_model.fit(X_train, y_train)
+
+    men_data_obj = Data()
+    women_data_obj = Data()
+    men_classifier = men_data_obj.build_model("men", False, 2003, 2023, 'bayes', False, True)
+    # women_classifier = women_data_obj.build_model("women", False, 2010, 2024, False, False, True)
+    # season_dict = createSeasonDict()
+    # createSubmission(men_data_obj, women_data_obj)

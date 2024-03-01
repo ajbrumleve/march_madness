@@ -9,11 +9,11 @@ class MainPanel(wx.Panel):
 
     def __init__(self, parent):
         super().__init__(parent)
-        file = open("women_noseed_xgb_2023_march_madness.dill", "rb")
+        file = open("men_noseed_xgb_2023_march_madness_2.dill", "rb")
         self.data_instance = dill.load(file)
         file.close()
         # self.data_instance = march_madness.Data().load_model()
-        self.data_instance.w_teams_pd = pd.read_csv('files/WTeams.csv')
+        self.data_instance.w_teams_pd = pd.read_csv('files/MTeams.csv')
         team1_label = wx.StaticText(self, label="First Team")
         team2_label = wx.StaticText(self, label="Second Team")
         self.team1 = wx.TextCtrl(self, style=wx.TE_PROCESS_ENTER)
@@ -30,9 +30,9 @@ class MainPanel(wx.Panel):
         teams_sizer.Add(input_sizer1)
         teams_sizer.Add(input_sizer2)
         main_sizer = wx.BoxSizer(wx.VERTICAL)
-        main_sizer.Add(teams_sizer, proportion=.5, flag=wx.ALL | wx.CENTER, border=5)
-        main_sizer.Add(button, proportion=.5, flag=wx.ALL | wx.CENTER, border=5)
-        main_sizer.Add(self.result_txt, proportion=.5, flag=wx.ALL | wx.CENTER, border=5)
+        main_sizer.Add(teams_sizer, flag=wx.ALL | wx.CENTER, border=5)
+        main_sizer.Add(button,  flag=wx.ALL | wx.CENTER, border=5)
+        main_sizer.Add(self.result_txt,  flag=wx.ALL | wx.CENTER, border=5)
         button.Bind(wx.EVT_BUTTON, self.predict)
         self.SetSizer(main_sizer)
 
