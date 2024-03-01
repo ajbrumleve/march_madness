@@ -4,8 +4,9 @@ import time
 import pandas as pd
 from sklearn.feature_selection import RFECV
 from sklearn.metrics import brier_score_loss, make_scorer
-from sklearn.model_selection import GridSearchCV, cross_validate
-
+from sklearn.model_selection import GridSearchCV, cross_validate, train_test_split
+import xgboost as xgb
+from hyperopt import fmin, tpe, hp, STATUS_OK
 
 
 class Classifier:
@@ -80,3 +81,32 @@ class Classifier:
         print(f"The difference from train to test recall is {results['train_recall'].mean()-results['test_recall'].mean()}")
         print(f"The difference from train to test brier is {results['train_neg_brier_score'].mean()-results['test_neg_brier_score'].mean()}")
         return accuracy
+
+    def bayesian_opt(self):
+        # Define the hyperparameter space
+        space = {
+            'max_depth': hp.quniform('max_depth', 2, 8, 1),
+            'learning_rate': hp.loguniform('learning_rate', -5, -2),
+            'subsample': hp.uniform('subsample', 0.5, 1),
+            'min_child_weight': hp.quniform('min_child_weight', 1, 10, 1),
+            'colsample_bytree':hp.uniform('colsample_bytree', 0.5, 1),
+            'gamma':hp.uniform('gamma', 0, 1),
+            'lambda':hp.uniform('lambda', 0, 1),
+            'alpha':hp.uniform('alpha', 0, 1)
+        }
+        X_train, X_val, y_train, y_val = train_test_split(self.xTrain, self.yTrain, test_size=0.2, random_state=42)
+
+        # Define the objective function to minimize
+        def objective(params):
+            params['max_depth'] = int(params['max_depth'])
+            xgb_model = xgb.XGBClassifier(**params)
+            xgb_model.fit(X_train, y_train)
+            y_pred = xgb_model.predict(X_val)
+            score = brier_score_loss(y_val, y_pred)
+            return {'loss': -score, 'status': STATUS_OK}
+
+        # Perform the optimization
+        best_params = fmin(objective, space, algo=tpe.suggest, max_evals=1000)
+
+        print("Best set of hyperparameters: ", best_params)
+        self.model = xgb.XGBClassifier(**best_params)
