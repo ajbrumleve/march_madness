@@ -3,7 +3,7 @@ import time
 
 import pandas as pd
 from sklearn.feature_selection import RFECV
-from sklearn.metrics import brier_score_loss, make_scorer
+from sklearn.metrics import brier_score_loss, make_scorer, f1_score
 from sklearn.model_selection import GridSearchCV, cross_validate, train_test_split
 import xgboost as xgb
 from hyperopt import fmin, tpe, hp, STATUS_OK
@@ -106,7 +106,7 @@ class Classifier:
             return {'loss': -score, 'status': STATUS_OK}
 
         # Perform the optimization
-        best_params = fmin(objective, space, algo=tpe.suggest, max_evals=1000)
+        best_params = fmin(objective, space, algo=tpe.suggest, max_evals=100)
 
         print("Best set of hyperparameters: ", best_params)
         self.model = xgb.XGBClassifier(**best_params)

@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import datetime
+import json
+import os
 import pickle
-
+# import torch
+# from torch_geometric.data import Data
+# import torch.nn.functional as F
+# from torch_geometric.nn import GCNConv
 import dill
-
+import networkx as nx
+# import H2H_Sim
 import classifier
 import pandas as pd
 import numpy as np
@@ -28,7 +35,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 import math
 import csv
 from sklearn.ensemble import VotingClassifier
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, brier_score_loss
 import urllib
 from sklearn.svm import LinearSVC
 from utils import *
@@ -56,6 +63,7 @@ class Data:
         self.listBigEastteams = []
         self.rfecv = None
         self.gender = ""
+        self.accuracy = {}
 
     def read_data(self, gender):
         def filter_by_season(row, tourney_teams):
@@ -173,17 +181,17 @@ class Data:
             # logging.info("Data read successfully")
 
             # add possession columns to dataframes
-            self.filtered_regular = self.add_poss_stats(self.filtered_regular)
-            print("This is the new reg season dataframe with all the per possession columns added\n\n",
-                  self.filtered_regular.head())
-
-            self.tourney_detailed_pd = self.add_poss_stats(self.tourney_detailed_pd)
-            print("This is the new tourney results dataframe with all the per possession columns added\n\n",
-                  self.tourney_detailed_pd.head())
+            # self.filtered_regular = self.add_poss_stats(self.filtered_regular)
+            # print("This is the new reg season dataframe with all the per possession columns added\n\n",
+            #       self.filtered_regular.head())
+            #
+            # self.tourney_detailed_pd = self.add_poss_stats(self.tourney_detailed_pd)
+            # print("This is the new tourney results dataframe with all the per possession columns added\n\n",
+            #       self.tourney_detailed_pd.head())
             return
 
     def read_ordinals(self):
-        df = pd.read_csv('files/MMasseyOrdinals.csv')
+        df = pd.read_csv('files/MMasseyOrdinals_thruSeason2024_day128.csv')
         # Create a combination of all possible combinations
         all_combinations = pd.MultiIndex.from_product([df['Season'].unique(),
                                                        df['RankingDayNum'].unique(),
@@ -279,9 +287,10 @@ class Data:
         """
 
         try:
-            teamName = self.teams_pd.values[team_id - 1101][1]
+            teamName = self.teams_pd.loc[self.teams_pd['TeamID'] == team_id, 'TeamName'].iloc[0]
+            # teamName = self.teams_pd.values[team_id - 1101][1]
         except:
-            teamName = self.teams_pd.values[team_id - 3101][1]
+            return 0
         if (teamName in self.listACCteams or teamName in self.listBig10teams or teamName in self.listBig12teams
                 or teamName in self.listSECteams or teamName in self.listPac12teams or teamName in self.listBigEastteams):
             return 1
@@ -1178,6 +1187,8 @@ class Data:
                                'Oklahoma St', 'Texas', 'Oklahoma']
         self.listBigEastteams = ['Butler', 'Creighton', 'DePaul', 'Georgetown', 'Marquette', 'Providence', 'Seton Hall',
                                  'St John\'s', 'Villanova', 'Xavier']
+        with open(f'{self.gender}2025_march_madness.obj', 'wb') as file:
+            pickle.dump(self, file)
 
         # TODO this is unused
         # getListForURL(teamList)
@@ -1192,7 +1203,7 @@ class Data:
 
             # test comparison of two teams in 2024
             kansas_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kansas'].values[0][0]
-            print("The vector for teamIDs 1234 and 1242 in 2024 is ", self.compareTwoTeams(1234, 1242, 2023))
+            print("The vector for teamIDs 1234 and 1242 in 2024 is ", self.compareTwoTeams(1234, 1242, 2024))
         else:
             # test the functions to this point
             print("The vector for teamID 3103 in 2024 is ", self.getSeasonData(3103, 2024))
@@ -1204,7 +1215,7 @@ class Data:
             # test comparison of two teams in 2022
             kansas_id = self.teams_pd[self.teams_pd['TeamName'] == 'Kansas'].values[0][0]
             print("The vector for teamIDs 3234 and 3242 in 2024 is ", self.compareTwoTeams(3234, 3242, 2024))
-
+        return
         training_data = self.get_x_and_y(prebuilt_data, first_year, last_year)
         self.xTrain = training_data[0]
         self.yTrain = training_data[1]
@@ -1265,21 +1276,21 @@ class Data:
                                             'subsample': [.5, 1]})
         if gridsearch_flag == 'bayes':
             self.clsf.bayesian_opt()
-            self.clsf.model['max_depth'] = int(self.clsf.model['max_depth'])
+            self.clsf.model.max_depth = int(self.clsf.model.max_depth)
 
         if rfecv_flag == True:
             self.rfecv = self.clsf.RFECVSelect()
 
         if analyze_flag == True:
-            accuracy = self.clsf.analyze_model()
+            self.accuracy = self.clsf.analyze_model()
 
         self.clsf.model.fit(self.clsf.xTrain, self.clsf.yTrain)
 
         # This can be used to predict 2022 games
         team1_name = "Creighton"
         team2_name = "San Diego St"
-        team1_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team1_name].values[0][0], 2023)
-        team2_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team2_name].values[0][0], 2023)
+        team1_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team1_name].values[0][0], 2024)
+        team2_vector = self.getSeasonData(self.teams_pd[self.teams_pd['TeamName'] == team2_name].values[0][0], 2024)
 
         print('Probability that ' + team1_name + ' wins:', self.predictGame(team1_vector, team2_vector, 0))
         try:
@@ -1289,11 +1300,11 @@ class Data:
             logging.error("Tried to reference rfecv with flag set to False")
 
         # pickle.dump(self, open("2023_march_madness.pickle", 'wb'),protocol=pickle.HIGHEST_PROTOCOL)
-        with open(f'{self.gender}_noseed_xgb_2023_march_madness_3.dill', 'wb') as file:
+        with open(f'241205_{self.gender}_xgb_brier_2025_march_madness_v1.dill', 'wb') as file:
             pickle.dump(self, file)
         return self.clsf
 
-    def submission(self, file_out="files/2023MarchMadnessKaggleLMR.csv") -> None:
+    def submission(self, file_out="files/2024MarchMadnessKaggleLMR.csv") -> None:
         submission = pd.read_csv("files/SampleSubmission2024.csv")
         submission
         logging.info("Creating submission csv")
@@ -1316,9 +1327,9 @@ class Data:
 
 if __name__ == "__main__":
 
-    def load_model():
+    def load_model(file):
         try:
-            file = open("combined_2023_march_madness.dill", "rb")
+            file = open(file, "rb")
             run = dill.load(file)
             file.close()
             return run
@@ -1331,12 +1342,12 @@ if __name__ == "__main__":
         season_dict = {}
         for i in range(len(men_data_obj.teams_pd)):
             id = men_data_obj.teams_pd["TeamID"][i]
-            season_dict[id] = men_data_obj.getSeasonData(id, 2023)
+            season_dict[id] = men_data_obj.getSeasonData(id, 2024)
             print(i)
 
         for i in range(len(women_data_obj.teams_pd)):
             id = women_data_obj.teams_pd["TeamID"][i]
-            season_dict[id] = women_data_obj.getSeasonData(id, 2023)
+            season_dict[id] = women_data_obj.getSeasonData(id, 2024)
             print(i)
         return season_dict
 
@@ -1355,8 +1366,8 @@ if __name__ == "__main__":
         return prediction
 
 
-    def createSubmission(mens_model, womens_model, file_out="files/2023NoSeedMarchMadnessKaggleLMR.csv") -> None:
-        submission = pd.read_csv("files/SampleSubmission2023.csv")
+    def createSubmission(mens_model, womens_model, file_out="files/2024NoSeedMarchMadnessKaggleLMR.csv") -> None:
+        submission = pd.read_csv("files/sample_submission.csv")
         sub_men = submission[:65703]
         sub_women = submission[65703:]
         logging.info("Creating submission csv")
@@ -1367,7 +1378,7 @@ if __name__ == "__main__":
         submission.drop(["Pred"], axis=1)
         submission = submission.copy().drop(["Pred"], axis=1)
         submission = submission.copy().rename(columns={"pred": "Pred"})
-        submission.to_csv("files/2023NoSeedMarchMadnessKaggleLMR.csv", index=False)
+        submission.to_csv("files/2024NoSeedMarchMadnessKaggleLMR.csv", index=False)
 
         submission.to_csv(file_out)
         logging.info("Submission csv created successfully")
@@ -1377,10 +1388,474 @@ if __name__ == "__main__":
     #     import xgboost as xgb
     #     xgb_model = xgb.XGBClassifier(verbosity=2)
     #     xgb_model.fit(X_train, y_train)
+    # import H2H_Sim
+    # men_data_obj = Data()
+    # women_data_obj = Data()
+    # men_classifier = men_data_obj.build_model("men", False, 2024, 2024, 'bayes', True, True)
+    # women_classifier = women_data_obj.build_model("women", False, 2003, 2024, 'bayes', True, True)
+    # season_dict = createSeasonDict()
 
-    men_data_obj = Data()
-    women_data_obj = Data()
-    men_classifier = men_data_obj.build_model("men", False, 2003, 2023, 'bayes', False, True)
+    # folder_path = 'files/kaggle_inputs'
+    # os.makedirs(folder_path, exist_ok=True)
+
+    # Save men_data_obj.training_min and men_data_obj.training_max as Numpy arrays
+    # np.save(os.path.join(folder_path, 'menTrainingMin.npy'), men_data_obj.training_min)
+    # np.save(os.path.join(folder_path, 'menTrainingMax.npy'), men_data_obj.training_max)
+
+    # Save men_data_obj.clsf.model and women_data_obj.clsf.model as model files
+    # men_model_path = os.path.join(folder_path, '2025_men_model_v2.mdl')
+    # women_model_path = os.path.join(folder_path, '2025_women_model_v2.mdl')
+    # with open(men_model_path, 'wb') as file:
+    #     pickle.dump(men_data_obj.clsf.model, file)
+    # with open(women_model_path, 'wb') as file:
+    #     pickle.dump(women_data_obj.clsf.model, file)
+
+
+    # Save women_data_obj.training_min and women_data_obj.training_max as Numpy arrays
+    # np.save(os.path.join(folder_path, 'womenTrainingMin.npy'), women_data_obj.training_min)
+    # np.save(os.path.join(folder_path, 'womenTrainingMax.npy'), women_data_obj.training_max)
+
+    # Save season_dict as a Pickle file
+    # season_dict_path = os.path.join('2025_season_dict_v2.dct')
+    # with open(season_dict_path, 'wb') as file:
+    #     pickle.dump(season_dict, file)
+
+    # Create about.json with the specified information
+    # about_info = {
+    #     'datetime': str(datetime.datetime.now()),
+    #     'men_cls_features': str(men_data_obj.clsf.features[0]),
+    #     'men_model_parameters': men_data_obj.clsf.model.get_params(),
+    #     'women_model_parameters': women_data_obj.clsf.model.get_params(),
+    #     'men_accuracy': men_data_obj.accuracy,
+    #     'women_accuracy': women_data_obj.accuracy
+    # }
+
+    # about_json_path = os.path.join(folder_path, 'about.json')
+    # with open(about_json_path, 'w') as json_file:
+    #     json.dump(about_info, json_file, indent=4)
+
+    # print("Files saved successfully.")
+
+
+    # sub = H2H_Sim.generate_portfolio_new(100000,men_data_obj, women_data_obj, season_dict)
     # women_classifier = women_data_obj.build_model("women", False, 2010, 2024, False, False, True)
     # season_dict = createSeasonDict()
     # createSubmission(men_data_obj, women_data_obj)
+    # sub.to_csv("files/2024MarchMadnessKaggle_brier_v3.csv", index=False)
+
+    # logging.info("Submission csv created successfully")
+    # filtered_df = sub[(sub['Tournament'] == 'M') & (sub['Slot'] == 'R6CH')]
+    # # Display unique values and their counts in the 'Team' column
+    # team_counts = filtered_df['Team'].value_counts()
+    # print(team_counts)
+
+
+    def get_team_name_for_round(round, data_obj):
+        try:
+            merged_df = pd.merge(data_obj.tourney_seeds_pd[data_obj.tourney_seeds_pd['Season']==2024], data_obj.teams_pd, on='TeamID', how='inner')
+            team_name = merged_df.loc[merged_df['Seed'] == round, 'TeamName'].iloc[0]
+
+        except IndexError:
+            team_name = round
+
+        return team_name
+
+
+    # def get_team_name_for_slot(slot, gender):
+    #     if gender == "M":
+    #         data_object = men_data_obj
+    #     elif gender == "W":
+    #         data_object = women_data_obj
+    #     filtered_df = sub[(sub['Tournament'] == gender) & (sub['Slot'] == slot)]
+    #     # Display unique values and their counts in the 'Team' column
+    #     team_counts = filtered_df['Team'].value_counts()
+    #
+    #     # Map round values to team names
+    #     round_to_team = {round_: get_team_name_for_round(round_, data_object) for round_ in team_counts.index}
+    #
+    #     # Replace index values with team names
+    #     team_counts_with_names = team_counts.rename(index=round_to_team)
+    #
+    #     print(slot)
+    #     print(team_counts_with_names[:3])
+    #     print("\n")
+
+
+    def process_bracket(gender):
+        get_team_name_for_slot("R6CH", gender)
+        get_team_name_for_slot("R5WX", gender)
+        get_team_name_for_slot("R5YZ", gender)
+
+        get_team_name_for_slot("R4W1", gender)
+        get_team_name_for_slot("R3W1", gender)
+        get_team_name_for_slot("R3W2", gender)
+        get_team_name_for_slot("R2W1", gender)
+        get_team_name_for_slot("R2W4", gender)
+        get_team_name_for_slot("R2W3", gender)
+        get_team_name_for_slot("R2W2", gender)
+        get_team_name_for_slot("R1W1", gender)
+        get_team_name_for_slot("R1W8", gender)
+        get_team_name_for_slot("R1W5", gender)
+        get_team_name_for_slot("R1W4", gender)
+        get_team_name_for_slot("R1W6", gender)
+        get_team_name_for_slot("R1W3", gender)
+        get_team_name_for_slot("R1W7", gender)
+        get_team_name_for_slot("R1W2", gender)
+
+        get_team_name_for_slot("R4X1", gender)
+        get_team_name_for_slot("R3X1", gender)
+        get_team_name_for_slot("R3X2", gender)
+        get_team_name_for_slot("R2X1", gender)
+        get_team_name_for_slot("R2X4", gender)
+        get_team_name_for_slot("R2X3", gender)
+        get_team_name_for_slot("R2X2", gender)
+        get_team_name_for_slot("R1X1", gender)
+        get_team_name_for_slot("R1X8", gender)
+        get_team_name_for_slot("R1X5", gender)
+        get_team_name_for_slot("R1X4", gender)
+        get_team_name_for_slot("R1X6", gender)
+        get_team_name_for_slot("R1X3", gender)
+        get_team_name_for_slot("R1X7", gender)
+        get_team_name_for_slot("R1X2", gender)
+
+        get_team_name_for_slot("R4Y1", gender)
+        get_team_name_for_slot("R3Y1", gender)
+        get_team_name_for_slot("R3Y2", gender)
+        get_team_name_for_slot("R2Y1", gender)
+        get_team_name_for_slot("R2Y4", gender)
+        get_team_name_for_slot("R2Y3", gender)
+        get_team_name_for_slot("R2Y2", gender)
+        get_team_name_for_slot("R1Y1", gender)
+        get_team_name_for_slot("R1Y8", gender)
+        get_team_name_for_slot("R1Y5", gender)
+        get_team_name_for_slot("R1Y4", gender)
+        get_team_name_for_slot("R1Y6", gender)
+        get_team_name_for_slot("R1Y3", gender)
+        get_team_name_for_slot("R1Y7", gender)
+        get_team_name_for_slot("R1Y2", gender)
+
+        get_team_name_for_slot("R4Z1", gender)
+        get_team_name_for_slot("R3Z1", gender)
+        get_team_name_for_slot("R3Z2", gender)
+        get_team_name_for_slot("R2Z1", gender)
+        get_team_name_for_slot("R2Z4", gender)
+        get_team_name_for_slot("R2Z3", gender)
+        get_team_name_for_slot("R2Z2", gender)
+        get_team_name_for_slot("R1Z1", gender)
+        get_team_name_for_slot("R1Z8", gender)
+        get_team_name_for_slot("R1Z5", gender)
+        get_team_name_for_slot("R1Z4", gender)
+        get_team_name_for_slot("R1Z6", gender)
+        get_team_name_for_slot("R1Z3", gender)
+        get_team_name_for_slot("R1Z7", gender)
+        get_team_name_for_slot("R1Z2", gender)
+    # process_bracket("M")
+
+    def get_brier_impact(slot,gender):
+        if gender == "M":
+            data_object = men_data_obj
+        elif gender == "W":
+            data_object = women_data_obj
+        filtered_df = sub[(sub['Tournament'] == gender) & (sub['Slot'] == slot)]
+        # Display unique values and their counts in the 'Team' column
+        team_counts = filtered_df['Team'].value_counts()
+
+        # Map round values to team names
+        round_to_team = {round_: get_team_name_for_round(round_, data_object) for round_ in team_counts.index}
+
+        # Replace index values with team names
+        team_counts_with_names = team_counts.rename(index=round_to_team)
+        briers = get_brier_series(team_counts_with_names)
+        return_df = pd.DataFrame({'teams':team_counts_with_names.index,'brier_impact':briers})
+        return return_df
+    def get_brier_series(series):
+        data = {'probability': series}
+        df = pd.DataFrame(data)
+        df['probability'] = df['probability']/100000
+        # Calculate Brier score for each row
+        brier_scores = []
+        for i in range(len(df)):
+            results = [0] * len(df)
+            results[i] = 1
+            score = brier_score_loss(results, df['probability'])
+            brier_scores.append(score)
+        # Add the Brier scores as a new column to the dataframe
+        return brier_scores
+
+
+def make_edge_df(data_obj,year):
+    df = data_obj.reg_season_compact_pd.copy()
+    df = df[df['Season']==year]
+    df['point_differential'] = df['WScore'] - df['LScore']
+    seeds_df = data_obj.tourney_seeds_pd.copy()
+    seeds_df = seeds_df[seeds_df['Season'] == year]
+    seed_dict = seeds_df.set_index('TeamID')['Seed'].to_dict()
+    df.loc[:,'WSeed'] = df['WTeamID'].map(lambda x: seed_dict.get(x, '16'))
+    df.loc[:,'LSeed'] = df['LTeamID'].map(lambda x: seed_dict.get(x, '16'))
+    df['WSeed'] = df['WSeed'].str.extract(r'(\d+)', expand=False).astype(int)
+    df['LSeed'] = df['LSeed'].str.extract(r'(\d+)', expand=False).astype(int)
+
+    # Create a directed graph
+    G = nx.DiGraph()
+
+    # Add edges with enhanced weights
+    for _, row in df.iterrows():
+        winner = row["WTeamID"]
+        loser = row["LTeamID"]
+        point_diff = row["point_differential"]
+        seed_diff = abs(row["WSeed"] - row["LSeed"])
+
+        # Compute enhanced weight (adjustable formula)
+        weight = 1 + point_diff * 0.1 - seed_diff * 0.05  # Scale/normalize as needed
+
+        # Add or update edge in the graph
+        if G.has_edge(winner, loser):
+            G[winner][loser]["weight"] += weight
+        else:
+            G.add_edge(winner, loser, weight=weight)
+
+    # Initialize team stats
+    team_stats = {}
+
+    # Aggregate statistics
+    for _, row in df.iterrows():
+        winner = row["WTeamID"]
+        loser = row["LTeamID"]
+        point_diff = row["point_differential"]
+
+        # Initialize stats if not present
+        for team in [winner, loser]:
+            if team not in team_stats:
+                team_stats[team] = {"wins": 0, "losses": 0, "point_diff": 0, "seed": None, "avg_opp_seed": 0}
+
+        # Update stats
+        team_stats[winner]["wins"] += 1
+        team_stats[winner]["point_diff"] += point_diff
+        team_stats[winner]["seed"] = row["WSeed"]
+        team_stats[winner]["avg_opp_seed"] = (team_stats[winner]["avg_opp_seed"] * (team_stats[winner]["wins"] + team_stats[winner]["losses"]-1) + row["LSeed"])/(team_stats[winner]["wins"] + team_stats[winner]["losses"])
+
+        team_stats[loser]["losses"] += 1
+        team_stats[loser]["point_diff"] -= point_diff
+        team_stats[loser]["seed"] = row["LSeed"]
+        team_stats[loser]["avg_opp_seed"] = (team_stats[loser]["avg_opp_seed"] * (team_stats[loser]["wins"] + team_stats[loser]["losses"]-1) + row["WSeed"])/(team_stats[loser]["wins"] + team_stats[loser]["losses"])
+
+
+    # Add node features to the graph
+    for team, stats in team_stats.items():
+        G.add_node(team,
+                   wins=stats["wins"],
+                   losses=stats["losses"],
+                   avg_point_diff=stats["point_diff"] / max(1, stats["wins"] + stats["losses"]),
+                   seed=stats["seed"],
+                   avg_opp_seed=stats["avg_opp_seed"])
+    # Print nodes with attributes
+    print("Teams with attributes:")
+    for node, data in G.nodes(data=True):
+        print(f"{node}: {data}")
+
+    # Print edges with weights
+    print("Matchups with weights:")
+    for u, v, data in G.edges(data=True):
+        print(f"{u} → {v}, weight: {data['weight']}")
+    return G
+
+def extract_team_features(G):
+    # Compute centrality measures
+    pagerank = nx.pagerank(G, weight="weight")
+    betweenness = nx.betweenness_centrality(G, weight="weight")
+    closeness = nx.closeness_centrality(G, distance="weight")
+
+    team_features = []
+    for team, data in G.nodes(data=True):
+        features = {
+            "TeamID": team,
+            "PageRank": pagerank.get(team, 0),
+            "WinLossRatio": data["wins"] / max(1, data["wins"] + data["losses"]),
+            "AvgPointDiff": data["avg_point_diff"],
+            "Seed": data["seed"],
+            "AvgOppSeed": data["avg_opp_seed"],
+            "Betweenness": betweenness.get(team, 0),
+            "Closeness": closeness.get(team, 0)
+        }
+        team_features.append(features)
+
+    return pd.DataFrame(team_features)
+
+def create_matchup_features(tourney_results, team_stats_df):
+    # Merge team statistics for each matchup
+    df = tourney_results.copy()
+    df = df.merge(team_stats_df, left_on="WTeamID", right_on="TeamID", suffixes=("", "_W"))
+    df = df.merge(team_stats_df, left_on="LTeamID", right_on="TeamID", suffixes=("_W", "_L"))
+
+    # Create feature differences
+    df["SeedDiff"] = df["Seed_W"] - df["Seed_L"]
+    df["PageRankDiff"] = df["PageRank_W"] - df["PageRank_L"]
+    df["WinLossRatioDiff"] = df["WinLossRatio_W"] - df["WinLossRatio_L"]
+    df["AvgPointDiffDiff"] = df["AvgPointDiff_W"] - df["AvgPointDiff_L"]
+    df["BetweennessDiff"] = df["Betweenness_W"] - df["Betweenness_L"]
+    df["ClosenessDiff"] = df["Closeness_W"] - df["Closeness_L"]
+
+    # Target: 1 if WTeam wins, 0 if LTeam wins
+    df["Label"] = 1
+
+    # Create the reversed matchups (to train both directions)
+    df_reverse = df.copy()
+    df_reverse["SeedDiff"] = -df_reverse["SeedDiff"]
+    df_reverse["PageRankDiff"] = -df_reverse["PageRankDiff"]
+    df_reverse["WinLossRatioDiff"] = -df_reverse["WinLossRatioDiff"]
+    df_reverse["AvgPointDiffDiff"] = -df_reverse["AvgPointDiffDiff"]
+    df_reverse["BetweennessDiff"] = -df_reverse["BetweennessDiff"]
+    df_reverse["ClosenessDiff"] = -df_reverse["ClosenessDiff"]
+    df_reverse["Label"] = 0  # Reverse the outcome
+
+    matchup_df = pd.concat([df, df_reverse], ignore_index=True)
+
+    return matchup_df[["SeedDiff", "PageRankDiff", "WinLossRatioDiff", "AvgPointDiffDiff",
+                       "BetweennessDiff", "ClosenessDiff", "Label"]]
+    # def extract_node_features(G):
+    #
+    #     # Get sorted node list to ensure consistency
+    #     nodes = sorted(G.nodes)
+    #     node_features = []
+    #
+    #     # Extract features for each node
+    #     for node in nodes:
+    #         attr = G.nodes[node]
+    #         features = [attr['wins'], attr['losses'], attr['avg_point_diff'], attr['seed'], attr['avg_opp_seed']]
+    #         node_features.append(features)
+    #
+    #     # Convert to PyTorch tensor
+    #     node_features_matrix = torch.tensor(node_features, dtype=torch.float)
+    #
+    #     # Extract edge list
+    #     edges = []
+    #     edge_weights = []
+    #
+    #     for u, v, attr in G.edges(data=True):
+    #         edges.append([nodes.index(u), nodes.index(v)])  # Use node indices
+    #         edge_weights.append(attr['weight'])
+    #
+    #     # Convert to PyTorch tensors
+    #     edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
+    #     edge_attr = torch.tensor(edge_weights, dtype=torch.float)
+    #
+    #     # Create graph data object
+    #     data = Data(x=node_features_matrix, edge_index=edge_index, edge_attr=edge_attr)
+    #     return data
+
+    class GameOutcomeGNN(torch.nn.Module):
+        def __init__(self, input_dim, hidden_dim, output_dim):
+            super(GameOutcomeGNN, self).__init__()
+            self.conv1 = GCNConv(input_dim, hidden_dim)
+            self.conv2 = GCNConv(hidden_dim, hidden_dim)
+            self.fc = torch.nn.Linear(2 * hidden_dim, output_dim)  # Combine two node embeddings
+
+        def forward(self, x, edge_index, edge_attr, node_pair):
+            # GCN layers
+            x = F.relu(self.conv1(x, edge_index, edge_attr))
+            x = self.conv2(x, edge_index, edge_attr)
+
+            # Extract embeddings for the node pair
+            h1 = x[node_pair[:, 0]]  # Embedding for the first node
+            h2 = x[node_pair[:, 1]]  # Embedding for the second node
+            h_pair = torch.cat([h1, h2], dim=1)  # Combine embeddings
+
+            # Predict outcome
+            return self.fc(h_pair)
+
+
+# men_data_obj =Data()
+# gender = 'men'
+# men_data_obj.gender = gender
+# men_data_obj.read_data(gender)
+# men_data_obj.build_model('men', False, 1990,2024,'bayes',True,True)
+filehandler = open('2024_graph_test.pkl', 'rb')
+men_data_obj = pickle.load(filehandler)
+full_matchup_df = pd.DataFrame()
+full_tourney_df = pd.DataFrame()
+for year in range(1990,2025):
+    print(year)
+    G = make_edge_df(men_data_obj,year)
+    df = extract_team_features(G)
+    matchup_df = create_matchup_features(men_data_obj.reg_season_compact_pd[men_data_obj.reg_season_compact_pd['Season']==year],df)
+    tourney_df = create_matchup_features(men_data_obj.tourney_compact_pd[men_data_obj.tourney_compact_pd['Season']==year],df)
+    full_matchup_df = pd.concat([full_matchup_df,matchup_df])
+    full_tourney_df = pd.concat([full_tourney_df,tourney_df])
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, log_loss
+
+# Load your data (assuming matchup_df is prepared)
+X = matchup_df.drop(columns=["Label"])
+y = matchup_df["Label"]
+
+# Split data into train/test
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Standardize features
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# Train Random Forest Model
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+# Predictions & evaluation
+y_pred = model.predict(X_test)
+y_pred_proba = model.predict_proba(X_test)[:, 1]
+
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("Log Loss:", log_loss(y_test, y_pred_proba))
+
+# Train/Test split
+X_train = full_matchup_df.drop(columns=["Label"])
+y_train = full_matchup_df["Label"]
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, log_loss
+
+# Standardize features
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+
+X_test = full_tourney_df.drop(columns=["Label"])
+y_test = full_tourney_df["Label"]
+
+X_test_scaled = scaler.transform(X_test)
+
+# Get predictions
+y_pred = model.predict(X_test_scaled)
+y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
+
+# Evaluate performance
+print("Tournament Accuracy:", accuracy_score(y_test, y_pred))
+print("Tournament Log Loss:", log_loss(y_test, y_pred_proba))
+
+# Train model
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train_scaled, y_train)
+
+# Give tournament games higher weight
+
+full_matchup_df["Weight"] = 1
+
+full_tourney_df["Weight"] = 5  # Tournament results are 5x more important
+
+# Combine datasets with adjusted weighting
+combined_df = pd.concat([full_matchup_df, full_tourney_df])
+X_combined = combined_df.drop(columns=["Label", "Weight"])
+y_combined = combined_df["Label"]
+weights = combined_df["Weight"]
+
+# Train new model with weighted samples
+from xgboost import XGBClassifier
+
+xgb_model = XGBClassifier(n_estimators=100)
+xgb_model.fit(X_combined, y_combined, sample_weight=weights)
+
+# Evaluate on tournament data
+y_tourney_pred = xgb_model.predict_proba(X_test_scaled)[:, 1]
+print("Updated Tournament Log Loss:", log_loss(y_test, y_tourney_pred))

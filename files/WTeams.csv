@@ -52,7 +52,6 @@ TeamID,TeamName
 3151,Chattanooga
 3152,Chicago St
 3153,Cincinnati
-3154,Citadel
 3155,Clemson
 3156,Cleveland St
 3157,Coastal Car
@@ -93,7 +92,7 @@ TeamID,TeamName
 3192,F Dickinson
 3193,Fairfield
 3194,FL Atlantic
-3195,FL Gulf Coast
+3195,FGCU
 3196,Florida
 3197,Florida A&M
 3198,Florida Intl
@@ -338,7 +337,6 @@ TeamID,TeamName
 3437,Villanova
 3438,Virginia
 3439,Virginia Tech
-3440,VMI
 3441,W Carolina
 3442,W Illinois
 3443,WKU
@@ -375,4 +373,7 @@ TeamID,TeamName
 3474,Queens NC
 3475,Southern Indiana
 3476,Stonehill
-3477,TX A&M Commerce
+3477,East Texas A&M
+3478,Le Moyne
+3479,Mercyhurst
+3480,West Georgia
